@@ -1,0 +1,7 @@
+You are now the Product manager of a game investment company. You are thinking about using Web Mining techniques to create a tool which can help you verify whether a game has the potential to succeed and worthy of investing. So mining the appropriate data and build a scientific model is vital for this tool. Just for a hint, you may wanna look for the games tabs and comments in Steam, or the discussing volumne in YouTube, Twitch or Reddit of some currently rather successful games (Only serves as hint
+because my idea may be nither scientific or symmetric). You also need to figure
+out how to define whether a game is successful through its sales and cost and
+etc. It would be the best if you can form this into a model. To make this tool
+more interesting, I'm thinking about coming up with a promote at the very that
+we can throw to some AI tool to make a demonstrate video or things like that.
+

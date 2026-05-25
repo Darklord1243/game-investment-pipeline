@@ -1,0 +1,145 @@
+{
+  "model_performance": {
+    "best_model": "ElasticNet",
+    "r2_score": 0.9587252311737128,
+    "confidence_interval": [
+      0.9988122047149992,
+      0.9996691438150569
+    ],
+    "statistical_significance": true
+  },
+  "data_summary": {
+    "total_games": 1406,
+    "total_features": 56,
+    "high_confidence_investments": 251,
+    "emerging_opportunities": 14
+  },
+  "recommendations": {
+    "high_confidence_games": [
+      {
+        "index": 1155,
+        "title": "The Hell in I",
+        "predicted_engagement": 911679.8964872698,
+        "confidence_score": 0.9923131589014585,
+        "risk_adjusted_score": 904671.9579902374,
+        "platform_presence": 2
+      },
+      {
+        "index": 396,
+        "title": "EARTH DEFENSE FORCE: WORLD BROTHERS 2 - Sorry To Keep You Waiting: Master Air Raider Joins the Fight",
+        "predicted_engagement": 866565.5614647893,
+        "confidence_score": 0.9954787865406844,
+        "risk_adjusted_score": 862647.6335849154,
+        "platform_presence": 2
+      },
+      {
+        "index": 1105,
+        "title": "THE TEAR",
+        "predicted_engagement": 865456.731061246,
+        "confidence_score": 0.9961799525605347,
+        "risk_adjusted_score": 862150.6452917875,
+        "platform_presence": 2
+      },
+      {
+        "index": 979,
+        "title": "Saint Kotar: The Crawling Man",
+        "predicted_engagement": 866790.3864107728,
+        "confidence_score": 0.9856804308713676,
+        "risk_adjusted_score": 854378.3215525297,
+        "platform_presence": 2
+      },
+      {
+        "index": 326,
+        "title": "Dark Mirror",
+        "predicted_engagement": 829245.7798394858,
+        "confidence_score": 0.9970938893914472,
+        "risk_adjusted_score": 826835.8998815966,
+        "platform_presence": 2
+      }
+    ],
+    "emerging_opportunities": [
+      {
+        "index": 794,
+        "title": "Neighbor Serene",
+        "predicted_engagement": 17352.720066748632,
+        "actual_engagement": 8375.32295898446,
+        "confidence_score": 0.9992198821369593,
+        "market_opportunity": 34678.365799704436
+      },
+      {
+        "index": 231,
+        "title": "Call of Duty\u00ae: Modern Warfare\u00ae III - Cyberjunkie: Pro Pack",
+        "predicted_engagement": 7776.613703150768,
+        "actual_engagement": 207.84485352622062,
+        "confidence_score": 0.9954707251076403,
+        "market_opportunity": 7741.391281957507
+      },
+      {
+        "index": 155,
+        "title": "Baratrum",
+        "predicted_engagement": 3960.342247491775,
+        "actual_engagement": 149.7330768798752,
+        "confidence_score": 0.9969660659321371,
+        "market_opportunity": 7896.653660453427
+      },
+      {
+        "index": 1380,
+        "title": "\u5931\u5fc6\u8005\u7684\u7ec8\u7ae0\uff08The Amnesiac\uff1aFinal Chapter\uff09",
+        "predicted_engagement": 3269.208350342262,
+        "actual_engagement": 304.84000000000003,
+        "confidence_score": 0.9992574122759346,
+        "market_opportunity": 3266.7806763538856
+      },
+      {
+        "index": 1090,
+        "title": "Sunny village",
+        "predicted_engagement": 1710.275712100105,
+        "actual_engagement": 498.5669085714286,
+        "confidence_score": 0.9989388509908071,
+        "market_opportunity": 3416.9217094455266
+      }
+    ],
+    "top_risk_adjusted": [
+      {
+        "index": 373,
+        "title": "Dota 2",
+        "predicted_engagement": 4337396.360620826,
+        "confidence_score": 0.669441945823046,
+        "risk_adjusted_score": 2903635.059459803,
+        "platform_presence": 3
+      },
+      {
+        "index": 1155,
+        "title": "The Hell in I",
+        "predicted_engagement": 911679.8964872698,
+        "confidence_score": 0.9923131589014585,
+        "risk_adjusted_score": 904671.9579902374,
+        "platform_presence": 2
+      },
+      {
+        "index": 396,
+        "title": "EARTH DEFENSE FORCE: WORLD BROTHERS 2 - Sorry To Keep You Waiting: Master Air Raider Joins the Fight",
+        "predicted_engagement": 866565.5614647893,
+        "confidence_score": 0.9954787865406844,
+        "risk_adjusted_score": 862647.6335849154,
+        "platform_presence": 2
+      },
+      {
+        "index": 1105,
+        "title": "THE TEAR",
+        "predicted_engagement": 865456.731061246,
+        "confidence_score": 0.9961799525605347,
+        "risk_adjusted_score": 862150.6452917875,
+        "platform_presence": 2
+      },
+      {
+        "index": 979,
+        "title": "Saint Kotar: The Crawling Man",
+        "predicted_engagement": 866790.3864107728,
+        "confidence_score": 0.9856804308713676,
+        "risk_adjusted_score": 854378.3215525297,
+        "platform_presence": 2
+      }
+    ]
+  }
+}
