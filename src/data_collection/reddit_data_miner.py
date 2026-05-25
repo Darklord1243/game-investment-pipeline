@@ -14,9 +14,8 @@ import logging
 import os
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Final, Generator, Optional
+from typing import Any, Final, Optional
 
 import praw
 import prawcore
@@ -29,6 +28,9 @@ from sqlalchemy.orm import Session
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from src.database.models import Base, Game, RedditMetric, SessionLocal, engine
+from src.database.session import db_session
+from src.utils.http import BaseRateLimiter
+from src.utils.parsers import normalize_text, parse_positive_int
 
 load_dotenv()
 
@@ -96,10 +98,11 @@ class PostSnapshot:
 # ---------------------------------------------------------------------------
 
 
-class RedditRateLimiter:
-    """Encapsulates pacing between Reddit API calls and exponential backoff."""
+class RedditRateLimiter(BaseRateLimiter):
+    """Fixed-delay pacing for Reddit API calls, with exponential backoff from base."""
 
     def __init__(self, delay_seconds: float = REQUEST_DELAY_SECONDS) -> None:
+        super().__init__()
         self._delay_seconds = delay_seconds
         self._last_request_at: Optional[float] = None
 
@@ -140,26 +143,6 @@ def utc_day_bounds(day: dt.date) -> tuple[dt.datetime, dt.datetime]:
     return start, end
 
 
-def parse_positive_int(raw: Any, field_name: str) -> Optional[int]:
-    """Parse a non-negative integer; log and return None on failure."""
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, bool):
-        logger.warning("Boolean provided for integer field %s: %r", field_name, raw)
-        return None
-    if isinstance(raw, int):
-        return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isdigit():
-        return int(raw)
-    logger.warning(
-        "Cannot parse %s as int: %r (%s)",
-        field_name,
-        raw,
-        type(raw).__name__,
-    )
-    return None
-
-
 def parse_optional_bool(raw: Any, field_name: str) -> Optional[bool]:
     """Parse an optional boolean without silent coercion."""
     if raw is None or raw == "":
@@ -191,20 +174,6 @@ def parse_epoch_seconds(raw: Any, field_name: str) -> Optional[float]:
         type(raw).__name__,
     )
     return None
-
-
-def normalize_text(raw: Any, field_name: str) -> str:
-    """Normalize optional text fields."""
-    if raw is None:
-        return ""
-    if not isinstance(raw, str):
-        logger.warning(
-            "Expected str for %s, got %s; coercing via str().",
-            field_name,
-            type(raw).__name__,
-        )
-        raw = str(raw)
-    return raw.strip()
 
 
 def analyze_comment_sentiment(
@@ -547,25 +516,6 @@ class RedditAPIClient:
                 )
 
         return snapshots
-
-
-# ---------------------------------------------------------------------------
-# Database access
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def db_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session with commit/rollback semantics."""
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
 def ensure_schema() -> None:

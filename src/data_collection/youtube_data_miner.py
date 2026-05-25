@@ -12,12 +12,10 @@ import argparse
 import datetime as dt
 import logging
 import os
-import re
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Final, Generator, Optional
+from typing import Any, Final, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -31,6 +29,9 @@ from sqlalchemy.orm import Session
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from src.database.models import Base, Game, SessionLocal, YouTubeMetric, engine
+from src.database.session import db_session
+from src.utils.http import BaseRateLimiter
+from src.utils.parsers import normalize_text, parse_positive_int
 
 load_dotenv()
 
@@ -96,37 +97,18 @@ class VideoSnapshot:
 # ---------------------------------------------------------------------------
 
 
-class YouTubeRateLimiter:
-    """Encapsulates client-side request pacing for YouTube and RYD HTTP calls."""
+class YouTubeRateLimiter(BaseRateLimiter):
+    """Sliding-window pacer for YouTube Data API v3 and RYD HTTP calls."""
 
     def __init__(
         self,
         max_requests_per_minute: int = MAX_REQUESTS_PER_MINUTE,
         buffer: int = REQUESTS_BUFFER,
     ) -> None:
-        self._max_requests_per_minute = max_requests_per_minute
-        self._buffer = buffer
-        self._timestamps: list[float] = []
-
-    def wait_if_needed(self) -> None:
-        """Block until another request is allowed under the sliding window."""
-        now = time.time()
-        self._timestamps = [ts for ts in self._timestamps if now - ts < 60.0]
-        threshold = self._max_requests_per_minute - self._buffer
-        if len(self._timestamps) < threshold:
-            return
-        oldest = self._timestamps[0]
-        sleep_for = 60.0 - (now - oldest)
-        if sleep_for > 0:
-            logger.info(
-                "Client-side rate buffer reached; sleeping %.0f seconds.",
-                sleep_for,
-            )
-            time.sleep(sleep_for)
-
-    def record_request(self) -> None:
-        """Record that an HTTP or API request was dispatched."""
-        self._timestamps.append(time.time())
+        super().__init__(
+            max_requests_per_minute=max_requests_per_minute,
+            buffer=buffer,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -163,40 +145,6 @@ def parse_youtube_timestamp(raw: str) -> Optional[dt.datetime]:
     if parsed.tzinfo is not None:
         return parsed.astimezone(dt.timezone.utc).replace(tzinfo=None)
     return parsed
-
-
-def parse_positive_int(raw: Any, field_name: str) -> Optional[int]:
-    """Parse a non-negative integer; log and return None on failure."""
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, bool):
-        logger.warning("Boolean provided for integer field %s: %r", field_name, raw)
-        return None
-    if isinstance(raw, int):
-        return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isdigit():
-        return int(raw)
-    logger.warning(
-        "Cannot parse %s as int: %r (%s)",
-        field_name,
-        raw,
-        type(raw).__name__,
-    )
-    return None
-
-
-def normalize_text(raw: Any, field_name: str) -> str:
-    """Normalize optional text fields; collapse whitespace."""
-    if raw is None:
-        return ""
-    if not isinstance(raw, str):
-        logger.warning(
-            "Expected str for %s, got %s; coercing via str().",
-            field_name,
-            type(raw).__name__,
-        )
-        raw = str(raw)
-    return re.sub(r"[\n\r\t]+", " ", raw).strip()
 
 
 def analyze_comments_sentiment(comments: list[str]) -> tuple[float, float, float]:
@@ -653,25 +601,6 @@ class YouTubeAPIClient:
         if best_item is None:
             return None
         return self.build_video_snapshot(game_name, best_item)
-
-
-# ---------------------------------------------------------------------------
-# Database access
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def db_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session with commit/rollback semantics."""
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
 def ensure_schema() -> None:

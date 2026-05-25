@@ -15,9 +15,8 @@ import logging
 import os
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Final, Generator, Optional
+from typing import Any, Final, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -29,6 +28,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from src.database.models import Base, Game, SessionLocal, TwitchMetric, engine
+from src.database.session import db_session
+from src.utils.http import BaseRateLimiter
+from src.utils.parsers import parse_positive_int
 
 load_dotenv()
 
@@ -85,37 +87,18 @@ class StreamSnapshot:
 # ---------------------------------------------------------------------------
 
 
-class TwitchRateLimiter:
-    """Encapsulates client-side request pacing and Helix header backoff."""
+class TwitchRateLimiter(BaseRateLimiter):
+    """Extends ``BaseRateLimiter`` with Helix header-aware backoff."""
 
     def __init__(
         self,
         max_requests_per_minute: int = MAX_REQUESTS_PER_MINUTE,
         buffer: int = REQUESTS_BUFFER,
     ) -> None:
-        self._max_requests_per_minute = max_requests_per_minute
-        self._buffer = buffer
-        self._timestamps: list[float] = []
-
-    def wait_if_needed(self) -> None:
-        """Block until another request is allowed under the sliding window."""
-        now = time.time()
-        self._timestamps = [ts for ts in self._timestamps if now - ts < 60.0]
-        threshold = self._max_requests_per_minute - self._buffer
-        if len(self._timestamps) < threshold:
-            return
-        oldest = self._timestamps[0]
-        sleep_for = 60.0 - (now - oldest)
-        if sleep_for > 0:
-            logger.info(
-                "Client-side rate buffer reached; sleeping %.0f seconds.",
-                sleep_for,
-            )
-            time.sleep(sleep_for)
-
-    def record_request(self) -> None:
-        """Record that an HTTP request was dispatched."""
-        self._timestamps.append(time.time())
+        super().__init__(
+            max_requests_per_minute=max_requests_per_minute,
+            buffer=buffer,
+        )
 
     def apply_response_headers(self, response: Response) -> None:
         """Honor Twitch ``Ratelimit-*`` headers when the bucket is nearly empty."""
@@ -179,21 +162,6 @@ def parse_twitch_timestamp(raw: str) -> Optional[dt.datetime]:
     if parsed.tzinfo is not None:
         return parsed.astimezone(dt.timezone.utc).replace(tzinfo=None)
     return parsed
-
-
-def parse_positive_int(raw: Any, field_name: str) -> Optional[int]:
-    """Parse a non-negative integer; log and return None on failure."""
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, bool):
-        logger.warning("Boolean provided for integer field %s: %r", field_name, raw)
-        return None
-    if isinstance(raw, int):
-        return raw if raw >= 0 else None
-    if isinstance(raw, str) and raw.isdigit():
-        return int(raw)
-    logger.warning("Cannot parse %s as int: %r (%s)", field_name, raw, type(raw).__name__)
-    return None
 
 
 def parse_helix_stream(item: dict[str, Any], twitch_game_id: str) -> Optional[StreamSnapshot]:
@@ -457,25 +425,6 @@ class TwitchHelixClient:
             if parsed is not None:
                 snapshots.append(parsed)
         return snapshots
-
-
-# ---------------------------------------------------------------------------
-# Database access
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def db_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session with commit/rollback semantics."""
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
 def ensure_schema() -> None:

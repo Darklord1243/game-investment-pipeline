@@ -13,12 +13,10 @@ import datetime as dt
 import difflib
 import logging
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Final, Generator, Optional
+from typing import Any, Final, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -32,6 +30,9 @@ from sqlalchemy.orm import Session
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from src.database.models import Base, Game, SessionLocal, engine
+from src.database.session import db_session
+from src.utils.http import BaseRateLimiter
+from src.utils.parsers import normalize_text, parse_positive_int
 
 load_dotenv()
 
@@ -154,7 +155,7 @@ class GameSnapshot:
 # ---------------------------------------------------------------------------
 
 
-class SteamRateLimiter:
+class SteamRateLimiter(BaseRateLimiter):
     """Thread-safe sliding-window limiter for Steam HTTP calls."""
 
     def __init__(
@@ -162,59 +163,15 @@ class SteamRateLimiter:
         max_requests_per_minute: int = MAX_REQUESTS_PER_MINUTE,
         buffer: int = REQUESTS_BUFFER,
     ) -> None:
-        self._max_requests_per_minute = max_requests_per_minute
-        self._buffer = buffer
-        self._timestamps: list[float] = []
-        self._lock = threading.Lock()
-
-    def wait_if_needed(self) -> None:
-        """Block until another request is allowed under the sliding window."""
-        with self._lock:
-            now = time.time()
-            self._timestamps = [ts for ts in self._timestamps if now - ts < 60.0]
-            threshold = self._max_requests_per_minute - self._buffer
-            if len(self._timestamps) < threshold:
-                return
-            oldest = self._timestamps[0]
-            sleep_for = 60.0 - (now - oldest)
-        if sleep_for > 0:
-            logger.info(
-                "Client-side rate buffer reached; sleeping %.0f seconds.",
-                sleep_for,
-            )
-            time.sleep(sleep_for)
-
-    def record_request(self) -> None:
-        """Record that an HTTP request was dispatched."""
-        with self._lock:
-            self._timestamps.append(time.time())
+        super().__init__(
+            max_requests_per_minute=max_requests_per_minute,
+            buffer=buffer,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Parsing helpers (explicit — no silent coercion)
 # ---------------------------------------------------------------------------
-
-
-def parse_positive_int(raw: Any, field_name: str) -> Optional[int]:
-    """Parse a non-negative integer; log and return None on failure."""
-    if raw is None or raw == "":
-        return None
-    if isinstance(raw, bool):
-        logger.warning("Boolean provided for integer field %s: %r", field_name, raw)
-        return None
-    if isinstance(raw, int):
-        return raw if raw >= 0 else None
-    if isinstance(raw, str):
-        cleaned = raw.replace(",", "").strip()
-        if cleaned.isdigit():
-            return int(cleaned)
-    logger.warning(
-        "Cannot parse %s as int: %r (%s)",
-        field_name,
-        raw,
-        type(raw).__name__,
-    )
-    return None
 
 
 def parse_non_negative_float(raw: Any, field_name: str) -> Optional[float]:
@@ -241,20 +198,6 @@ def parse_non_negative_float(raw: Any, field_name: str) -> Optional[float]:
         type(raw).__name__,
     )
     return None
-
-
-def normalize_text(raw: Any, field_name: str) -> str:
-    """Normalize optional text fields."""
-    if raw is None:
-        return ""
-    if not isinstance(raw, str):
-        logger.warning(
-            "Expected str for %s, got %s; coercing via str().",
-            field_name,
-            type(raw).__name__,
-        )
-        raw = str(raw)
-    return re.sub(r"[\n\r\t]+", " ", raw).strip()
 
 
 def parse_steam_release_date(raw: str) -> Optional[dt.date]:
@@ -679,25 +622,6 @@ class SteamAPIClient:
             snapshot.current_players,
         )
         return snapshot
-
-
-# ---------------------------------------------------------------------------
-# Database access
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def db_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session with commit/rollback semantics."""
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
 def ensure_schema() -> None:
