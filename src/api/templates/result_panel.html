@@ -1,0 +1,37 @@
+<div class="card">
+  {% if cache_banner %}
+  <div class="banner">⚠ {{ cache_banner }}</div>
+  {% endif %}
+  <h1>Engagement Score: {{ result.engagement_score }} / 100
+    <span class="tier-{{ result.tier|lower }}">[ {{ result.tier }} ]</span></h1>
+  <p><strong>ⓘ What this means:</strong> descriptive cross-platform engagement, relative to a reference set.
+     Not a sales prediction.</p>
+
+  <h2>Top drivers (plain language)</h2>
+  <ol class="drivers">
+    {% for driver in result.top_drivers %}
+    <li>{{ driver }}</li>
+    {% endfor %}
+  </ol>
+
+  <h2>Per-platform sentiment</h2>
+  <p>YouTube {{ "%+.2f"|format(result.youtube_sentiment) }}
+    <div class="sentiment-bar"><div class="sentiment-fill" style="width:{{ result.youtube_bar }}%"></div></div>
+  </p>
+  <p>Reddit {{ "%+.2f"|format(result.reddit_sentiment) }}
+    <div class="sentiment-bar"><div class="sentiment-fill" style="width:{{ result.reddit_bar }}%"></div></div>
+  </p>
+
+  <p>Data freshness:
+    {% if result.freshness == 'LIVE' %}
+    mined {{ result.mined_at }} <span class="badge badge-live">LIVE</span>
+    {% else %}
+    cached sample <span class="badge badge-cached">CACHED ⚠</span>
+    {% endif %}
+  </p>
+
+  <p style="font-size:.9rem;color:#5f6368;">
+    <strong>Limitations:</strong> small sample per game; comparative within set;
+    engagement intelligence, not investment advice.
+  </p>
+</div>

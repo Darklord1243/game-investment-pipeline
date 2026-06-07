@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Game Engagement Intelligence{% endblock %}</title>
+  <style>
+    :root { --bg: #f4f6f8; --card: #fff; --text: #1a1a1a; --muted: #5f6368;
+            --accent: #1565c0; --high: #2e7d32; --medium: #f9a825; --low: #c62828; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg);
+           color: var(--text); line-height: 1.5; }
+    header { background: var(--card); border-bottom: 1px solid #e0e0e0; padding: 1rem 2rem; }
+    header a { color: var(--accent); text-decoration: none; margin-right: 1.25rem; font-weight: 600; }
+    main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem 3rem; }
+    .card { background: var(--card); padding: 1.5rem 2rem; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 1.5rem; }
+    h1 { margin-top: 0; font-size: 1.6rem; }
+    h2 { font-size: 1.15rem; margin: 1.5rem 0 .75rem; border-bottom: 1px solid #eee; padding-bottom: .35rem; }
+    label { display: block; font-weight: 600; margin-bottom: .25rem; font-size: .9rem; }
+    input[type=text], input[type=number] { width: 100%; padding: .5rem .65rem; border: 1px solid #ccc;
+           border-radius: 4px; margin-bottom: .75rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    button, .btn { display: inline-block; padding: .55rem 1.2rem; background: var(--accent); color: #fff;
+           border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 1rem; }
+    button:hover, .btn:hover { background: #0d47a1; }
+    .btn-secondary { background: #546e7a; }
+    .error { color: var(--low); margin: 1rem 0; }
+    .banner { background: #fff3e0; border: 1px solid #ffb74d; padding: .75rem 1rem; border-radius: 6px;
+              margin-bottom: 1rem; }
+    .badge { display: inline-block; padding: .2rem .55rem; border-radius: 4px; font-size: .75rem;
+             font-weight: 700; letter-spacing: .03em; }
+    .badge-live { background: #e8f5e9; color: var(--high); }
+    .badge-cached { background: #fff3e0; color: #e65100; }
+    .tier-high { color: var(--high); }
+    .tier-medium { color: var(--medium); }
+    .tier-low { color: var(--low); }
+    .sentiment-bar { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin: .25rem 0; }
+    .sentiment-fill { height: 100%; background: var(--accent); }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; font-size: .85rem;
+             color: var(--muted); }
+    footer p { margin: .5rem 0; }
+    .actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid #eee; }
+    ol.drivers { padding-left: 1.25rem; }
+    ol.drivers li { margin: .35rem 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('sandbox') }}">Sandbox</a>
+    <a href="{{ url_for('samples') }}">Samples</a>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+    <footer>
+      <p><strong>ⓘ</strong> {{ label_definition }}</p>
+      <p>{{ disclaimer }}</p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -106,6 +106,11 @@ class Game(Base):
         cascade="all, delete-orphan",
         order_by="RedditMetric.mined_at",
     )
+    steam_metrics: Mapped[list[SteamMetric]] = relationship(
+        back_populates="game",
+        cascade="all, delete-orphan",
+        order_by="SteamMetric.mined_at",
+    )
 
     def __repr__(self) -> str:
         return f"Game(id={self.id!r}, appid={self.appid!r}, steam_name={self.steam_name!r})"
@@ -298,6 +303,49 @@ class RedditMetric(Base):
         )
 
 
+class SteamMetric(Base):
+    """
+    One Steam enrichment snapshot for a game (time series).
+
+    Repeated observations per ``game_id`` are intentional — no UNIQUE on natural
+    keys. Phase 2 review-velocity labels query ``(game_id, mined_at)`` windows.
+    """
+
+    __tablename__ = "steam_metrics"
+    __table_args__ = (
+        Index("ix_steam_metrics_game_id", "game_id"),
+        Index("ix_steam_metrics_game_id_mined_at", "game_id", "mined_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    game_id: Mapped[int] = mapped_column(
+        ForeignKey("games.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mined_at: Mapped[dt.datetime] = mapped_column(
+        nullable=False,
+        doc="UTC timestamp when this row was persisted.",
+    )
+    total_reviews: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    positive_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    review_sentiment: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True,
+        doc="VADER compound score from recent Steam reviews.",
+    )
+    current_players: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    wishlist_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    supported_languages: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    game: Mapped[Game] = relationship(back_populates="steam_metrics")
+
+    def __repr__(self) -> str:
+        return (
+            f"SteamMetric(id={self.id!r}, game_id={self.game_id!r}, "
+            f"total_reviews={self.total_reviews!r})"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Engine & session factory
 # ---------------------------------------------------------------------------
@@ -336,6 +384,7 @@ __all__: Sequence[str] = [
     "Game",
     "RedditMetric",
     "SessionLocal",
+    "SteamMetric",
     "TwitchMetric",
     "YouTubeMetric",
     "engine",

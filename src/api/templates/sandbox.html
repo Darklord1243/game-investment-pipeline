@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Sandbox — Game Engagement Intelligence{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Sandbox — score a hypothetical game (no network)</h1>
+  <form method="post" action="{{ url_for('sandbox') }}">
+    <label for="sample_prefill">Prefill from sample</label>
+    <select id="sample_prefill" name="sample_prefill" style="width:100%;padding:.5rem;margin-bottom:1rem;">
+      <option value="">— manual entry —</option>
+      {% for s in samples %}
+      <option value="{{ s.steam_name }}" {% if selected_sample == s.steam_name %}selected{% endif %}>
+        {{ s.steam_name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    <h2>YouTube</h2>
+    <div class="grid-2">
+      <div><label>Total views</label><input type="number" name="youtube_total_views" min="0" step="1" value="{{ values.youtube_total_views }}" required></div>
+      <div><label>Engagement rate</label><input type="number" name="youtube_engagement_rate" min="0" max="1" step="0.001" value="{{ values.youtube_engagement_rate }}" required></div>
+      <div><label>Total likes</label><input type="number" name="youtube_total_likes" min="0" step="1" value="{{ values.youtube_total_likes }}" required></div>
+      <div><label>Total comments</label><input type="number" name="youtube_total_comments" min="0" step="1" value="{{ values.youtube_total_comments }}" required></div>
+      <div><label>Avg sentiment (−1 … 1)</label><input type="number" name="youtube_avg_sentiment" min="-1" max="1" step="0.01" value="{{ values.youtube_avg_sentiment }}" required></div>
+    </div>
+
+    <h2>Reddit</h2>
+    <div class="grid-2">
+      <div><label>Total score</label><input type="number" name="reddit_total_score" min="0" step="1" value="{{ values.reddit_total_score }}" required></div>
+      <div><label>Post count</label><input type="number" name="reddit_post_count" min="0" step="1" value="{{ values.reddit_post_count }}" required></div>
+      <div><label>Total comments</label><input type="number" name="reddit_total_comments" min="0" step="1" value="{{ values.reddit_total_comments }}" required></div>
+      <div><label>Avg sentiment (−1 … 1)</label><input type="number" name="reddit_avg_sentiment" min="-1" max="1" step="0.01" value="{{ values.reddit_avg_sentiment }}" required></div>
+    </div>
+
+    <h2>Twitch</h2>
+    <div class="grid-2">
+      <div><label>Total viewers</label><input type="number" name="twitch_total_viewers" min="0" step="1" value="{{ values.twitch_total_viewers }}" required></div>
+      <div><label>Stream count</label><input type="number" name="twitch_stream_count" min="0" step="1" value="{{ values.twitch_stream_count }}" required></div>
+    </div>
+
+    <h2>Cross-platform</h2>
+    <div class="grid-2">
+      <div><label>Cross-platform engagement rate</label><input type="number" name="cross_platform_engagement_rate" min="0" max="1" step="0.001" value="{{ values.cross_platform_engagement_rate }}" required></div>
+      <div><label>Platforms present (0–3)</label><input type="number" name="platform_presence" min="0" max="3" step="1" value="{{ values.platform_presence }}" required></div>
+    </div>
+
+    <button type="submit" style="margin-top:1rem;">Compute Engagement Score</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+</div>
+{% if result %}{% include "result_panel.html" %}{% endif %}
+{% endblock %}

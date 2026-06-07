@@ -349,18 +349,38 @@ class GameInvestmentPredictor:
     # Training loop
     # ------------------------------------------------------------------
 
-    def train(self, df: pd.DataFrame) -> TrainingMetrics:
+    def train(self, df: pd.DataFrame) -> Optional[TrainingMetrics]:
         """
         End-to-end training: target, temporal split, scale, fit, log, persist.
+
+        Skips fitting when no external supervision label is available (all
+        ``target_variable_score`` values null). The descriptive engagement index
+        replaces circular ``target_score`` training until Phase 2.
 
         Args:
             df: Feature matrix (``DatabaseFeatureEngineer`` output + release dates).
 
         Returns:
-            TrainingMetrics with MAE/R² on train and test splits.
+            TrainingMetrics with MAE/R² on train and test splits, or ``None``
+            when training was skipped.
         """
         if df.empty:
             raise ValueError("Training DataFrame is empty.")
+
+        if "target_variable_score" in df.columns:
+            external = pd.to_numeric(df["target_variable_score"], errors="coerce")
+            if external.notna().sum() == 0:
+                logger.warning(
+                    "No external label available; ML training skipped — "
+                    "engagement index is descriptive-only. See Phase 2."
+                )
+                return None
+        else:
+            logger.warning(
+                "No external label available; ML training skipped — "
+                "engagement index is descriptive-only. See Phase 2."
+            )
+            return None
 
         prepared = self._dedupe_latest_batch(df)
         release_dates = self._resolve_release_dates(prepared)
@@ -508,19 +528,34 @@ if __name__ == "__main__":
     batch_day = dt.date.today()
     with SessionLocal() as session:
         features = DatabaseFeatureEngineer().build_feature_matrix(session, batch_day)
-        release_df = pd.DataFrame(
+        game_meta = pd.DataFrame(
             session.execute(
-                select(Game.id.label("game_id"), Game.release_date)
+                select(
+                    Game.id.label("game_id"),
+                    Game.release_date,
+                    Game.target_variable_score,
+                )
             ).mappings().all()
         )
 
     if features.empty:
         logger.warning("No feature rows for %s; skipping training.", batch_day)
     else:
-        train_df = build_training_frame(features, release_df)
-        metrics = GameInvestmentPredictor().train(train_df)
-        print(
-            f"Trained on {metrics.n_train} games, tested on {metrics.n_test} "
-            f"(cutoff {metrics.release_date_cutoff.date()}). "
-            f"Test MAE={metrics.test_mae:.3f}, R2={metrics.test_r2:.3f}"
+        train_df = build_training_frame(
+            features,
+            game_meta.rename(columns={"release_date": RELEASE_DATE_COLUMN}),
         )
+        train_df = train_df.merge(
+            game_meta[["game_id", "target_variable_score"]],
+            on="game_id",
+            how="left",
+        )
+        metrics = GameInvestmentPredictor().train(train_df)
+        if metrics is None:
+            logger.info("ML training skipped (no external label).")
+        else:
+            print(
+                f"Trained on {metrics.n_train} games, tested on {metrics.n_test} "
+                f"(cutoff {metrics.release_date_cutoff.date()}). "
+                f"Test MAE={metrics.test_mae:.3f}, R2={metrics.test_r2:.3f}"
+            )

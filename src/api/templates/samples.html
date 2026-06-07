@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Cached samples — Game Engagement Intelligence{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Cached demo games (offline)</h1>
+  <table>
+    <thead>
+      <tr><th>Game</th><th>Score</th><th>Tier</th><th>Narrative</th></tr>
+    </thead>
+    <tbody>
+      {% for s in samples %}
+      <tr>
+        <td>{{ s.steam_name }}</td>
+        <td>{{ s.precomputed_engagement_score }}</td>
+        <td class="tier-{{ s.tier|lower }}">{{ s.tier }}</td>
+        <td>{{ s.narrative }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

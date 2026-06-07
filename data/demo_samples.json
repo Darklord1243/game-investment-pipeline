@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-07T00:00:00Z",
+  "reference_stats": {
+    "youtube_total_views": {
+      "min": 45000.0,
+      "max": 4500000.0
+    },
+    "youtube_engagement_rate": {
+      "min": 0.02,
+      "max": 0.06
+    },
+    "youtube_total_likes": {
+      "min": 1200.0,
+      "max": 180000.0
+    },
+    "youtube_total_comments": {
+      "min": 180.0,
+      "max": 42000.0
+    },
+    "youtube_avg_sentiment": {
+      "min": -0.35,
+      "max": 0.52
+    },
+    "reddit_total_score": {
+      "min": 800.0,
+      "max": 72000.0
+    },
+    "reddit_post_count": {
+      "min": 4.0,
+      "max": 200.0
+    },
+    "reddit_total_comments": {
+      "min": 120.0,
+      "max": 25000.0
+    },
+    "reddit_avg_sentiment": {
+      "min": -0.28,
+      "max": 0.42
+    },
+    "twitch_total_viewers": {
+      "min": 0.0,
+      "max": 350000.0
+    },
+    "twitch_stream_count": {
+      "min": 0.0,
+      "max": 450.0
+    },
+    "cross_platform_engagement_rate": {
+      "min": 0.01,
+      "max": 0.08
+    },
+    "platform_presence": {
+      "min": 2.0,
+      "max": 3.0
+    }
+  },
+  "samples": [
+    {
+      "steam_name": "Counter-Strike 2",
+      "appid": 730,
+      "tier_expected": "high",
+      "narrative": "F2P juggernaut; huge Twitch + YouTube; ceiling anchor",
+      "features": {
+        "youtube_total_views": 4500000,
+        "youtube_engagement_rate": 0.06,
+        "youtube_total_likes": 180000,
+        "youtube_total_comments": 42000,
+        "youtube_avg_sentiment": 0.22,
+        "reddit_total_score": 65000,
+        "reddit_post_count": 120,
+        "reddit_total_comments": 18000,
+        "reddit_avg_sentiment": 0.15,
+        "twitch_total_viewers": 350000,
+        "twitch_stream_count": 450,
+        "cross_platform_engagement_rate": 0.08,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 89.53
+    },
+    {
+      "steam_name": "Baldur's Gate 3",
+      "appid": 1086940,
+      "tier_expected": "high",
+      "narrative": "Critical hit; strong Reddit discussion + positive sentiment",
+      "features": {
+        "youtube_total_views": 3200000,
+        "youtube_engagement_rate": 0.055,
+        "youtube_total_likes": 140000,
+        "youtube_total_comments": 35000,
+        "youtube_avg_sentiment": 0.45,
+        "reddit_total_score": 72000,
+        "reddit_post_count": 200,
+        "reddit_total_comments": 25000,
+        "reddit_avg_sentiment": 0.38,
+        "twitch_total_viewers": 120000,
+        "twitch_stream_count": 85,
+        "cross_platform_engagement_rate": 0.07,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 80.75
+    },
+    {
+      "steam_name": "Stardew Valley",
+      "appid": 413150,
+      "tier_expected": "high",
+      "narrative": "Sleeper indie hit; durable community, modest Twitch",
+      "features": {
+        "youtube_total_views": 2600000,
+        "youtube_engagement_rate": 0.048,
+        "youtube_total_likes": 88000,
+        "youtube_total_comments": 15000,
+        "youtube_avg_sentiment": 0.4,
+        "reddit_total_score": 52000,
+        "reddit_post_count": 70,
+        "reddit_total_comments": 9000,
+        "reddit_avg_sentiment": 0.32,
+        "twitch_total_viewers": 130000,
+        "twitch_stream_count": 42,
+        "cross_platform_engagement_rate": 0.058,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 60.29
+    },
+    {
+      "steam_name": "Dota 2",
+      "appid": 570,
+      "tier_expected": "high",
+      "narrative": "F2P massive CCU; skews revenue proxies",
+      "features": {
+        "youtube_total_views": 3400000,
+        "youtube_engagement_rate": 0.04,
+        "youtube_total_likes": 115000,
+        "youtube_total_comments": 28000,
+        "youtube_avg_sentiment": 0.18,
+        "reddit_total_score": 58000,
+        "reddit_post_count": 110,
+        "reddit_total_comments": 15000,
+        "reddit_avg_sentiment": 0.12,
+        "twitch_total_viewers": 320000,
+        "twitch_stream_count": 380,
+        "cross_platform_engagement_rate": 0.065,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 70.62
+    },
+    {
+      "steam_name": "Hades",
+      "appid": 1145360,
+      "tier_expected": "medium-high",
+      "narrative": "Acclaimed indie; balanced cross-platform, very positive sentiment",
+      "features": {
+        "youtube_total_views": 850000,
+        "youtube_engagement_rate": 0.048,
+        "youtube_total_likes": 38000,
+        "youtube_total_comments": 6500,
+        "youtube_avg_sentiment": 0.52,
+        "reddit_total_score": 18000,
+        "reddit_post_count": 35,
+        "reddit_total_comments": 3200,
+        "reddit_avg_sentiment": 0.42,
+        "twitch_total_viewers": 45000,
+        "twitch_stream_count": 18,
+        "cross_platform_engagement_rate": 0.045,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 42.93
+    },
+    {
+      "steam_name": "Vampire Survivors",
+      "appid": 1794680,
+      "tier_expected": "medium",
+      "narrative": "Cheap breakout; high engagement-per-dollar; strong Reddit",
+      "features": {
+        "youtube_total_views": 620000,
+        "youtube_engagement_rate": 0.05,
+        "youtube_total_likes": 28000,
+        "youtube_total_comments": 5000,
+        "youtube_avg_sentiment": 0.28,
+        "reddit_total_score": 14000,
+        "reddit_post_count": 28,
+        "reddit_total_comments": 2800,
+        "reddit_avg_sentiment": 0.25,
+        "twitch_total_viewers": 35000,
+        "twitch_stream_count": 12,
+        "cross_platform_engagement_rate": 0.04,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 36.42
+    },
+    {
+      "steam_name": "Hollow Knight",
+      "appid": 367520,
+      "tier_expected": "medium",
+      "narrative": "Beloved indie; steady, not viral; good sentiment",
+      "features": {
+        "youtube_total_views": 480000,
+        "youtube_engagement_rate": 0.038,
+        "youtube_total_likes": 22000,
+        "youtube_total_comments": 3800,
+        "youtube_avg_sentiment": 0.4,
+        "reddit_total_score": 11000,
+        "reddit_post_count": 22,
+        "reddit_total_comments": 2100,
+        "reddit_avg_sentiment": 0.32,
+        "twitch_total_viewers": 28000,
+        "twitch_stream_count": 10,
+        "cross_platform_engagement_rate": 0.035,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 32.46
+    },
+    {
+      "steam_name": "Creaks",
+      "appid": 956030,
+      "tier_expected": "low",
+      "narrative": "Quiet puzzle launch; thin cross-platform signal \u2014 floor anchor",
+      "features": {
+        "youtube_total_views": 45000,
+        "youtube_engagement_rate": 0.025,
+        "youtube_total_likes": 1200,
+        "youtube_total_comments": 180,
+        "youtube_avg_sentiment": 0.15,
+        "reddit_total_score": 800,
+        "reddit_post_count": 4,
+        "reddit_total_comments": 120,
+        "reddit_avg_sentiment": 0.1,
+        "twitch_total_viewers": 500,
+        "twitch_stream_count": 2,
+        "cross_platform_engagement_rate": 0.01,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 15.47
+    },
+    {
+      "steam_name": "Concord",
+      "appid": 2672530,
+      "tier_expected": "low",
+      "narrative": "Known commercial flop; negative/sparse sentiment despite marketing buzz",
+      "features": {
+        "youtube_total_views": 380000,
+        "youtube_engagement_rate": 0.02,
+        "youtube_total_likes": 8000,
+        "youtube_total_comments": 15000,
+        "youtube_avg_sentiment": -0.35,
+        "reddit_total_score": 5200,
+        "reddit_post_count": 45,
+        "reddit_total_comments": 8000,
+        "reddit_avg_sentiment": -0.28,
+        "twitch_total_viewers": 12000,
+        "twitch_stream_count": 8,
+        "cross_platform_engagement_rate": 0.015,
+        "platform_presence": 3
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 12.32
+    },
+    {
+      "steam_name": "A Short Hike",
+      "appid": 1055540,
+      "tier_expected": "low-medium",
+      "narrative": "Indie with no Twitch presence; platform-absence test",
+      "features": {
+        "youtube_total_views": 180000,
+        "youtube_engagement_rate": 0.042,
+        "youtube_total_likes": 9500,
+        "youtube_total_comments": 1600,
+        "youtube_avg_sentiment": 0.48,
+        "reddit_total_score": 6500,
+        "reddit_post_count": 18,
+        "reddit_total_comments": 1400,
+        "reddit_avg_sentiment": 0.35,
+        "twitch_total_viewers": 0,
+        "twitch_stream_count": 0,
+        "cross_platform_engagement_rate": 0.02,
+        "platform_presence": 2
+      },
+      "mined_at": "2026-06-01T00:00:00Z",
+      "precomputed_engagement_score": 24.86
+    }
+  ]
+}

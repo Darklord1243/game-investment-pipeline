@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Game Engagement Intelligence{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Game Engagement Intelligence</h1>
+  <p>Cross-platform community engagement &amp; sentiment for a Steam game — built for indie developers.
+     Not a sales forecast.</p>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('predict_form') }}">▶ Analyze a game</a>
+    <a class="btn btn-secondary" href="{{ url_for('sandbox') }}">▶ Try the Sandbox</a>
+  </div>
+  <p style="margin-top:1.5rem;font-size:.9rem;color:#5f6368;">
+    Engagement Score = descriptive composite, 0–100. Not sales/ROI. Course project.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Analyze a game — Game Engagement Intelligence{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Analyze a game (live mine + cache fallback)</h1>
+  <form method="post" action="{{ url_for('predict') }}">
+    <label for="steam_name">Steam game name</label>
+    <input id="steam_name" name="steam_name" type="text" required placeholder="e.g. Counter-Strike 2" maxlength="512" value="{{ steam_name or '' }}">
+    <button type="submit">Compute Engagement Score</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+</div>
+{% if result %}{% include "result_panel.html" %}{% endif %}
+{% endblock %}

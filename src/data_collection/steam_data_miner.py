@@ -29,7 +29,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from src.database.models import Base, Game, SessionLocal, engine
+from src.database.models import Base, Game, SessionLocal, SteamMetric, engine
 from src.database.session import db_session
 from src.utils.http import BaseRateLimiter
 from src.utils.parsers import normalize_text, parse_positive_int
@@ -45,7 +45,7 @@ REQUEST_TIMEOUT_SECONDS: Final[float] = 10.0
 BATCH_SIZE: Final[int] = 10_000
 DEFAULT_MAX_WORKERS: Final[int] = 2
 FUZZY_MATCH_CUTOFF: Final[float] = 0.7
-MIN_REVIEWS_FOR_SEED: Final[int] = 1
+MIN_REVIEWS_FOR_SEED: Final[int] = 50
 RECENT_REVIEWS_PAGE_SIZE: Final[int] = 20
 
 STEAM_USER_AGENT: Final[str] = (
@@ -132,21 +132,22 @@ class GameSnapshot:
     """
     Normalized Steam game payload ready for ``Game`` ORM persistence.
 
-    Enrichment fields (sentiment, players, wishlist) are retained for logging
-    and future labeling but are not persisted on ``Game`` today.
+    Enrichment fields are persisted on ``SteamMetric``; only dimension keys
+    land on ``Game``.
     """
 
     appid: int
     steam_name: str
     release_date: Optional[dt.date]
     total_reviews: Optional[int]
+    positive_rate: Optional[float]
     sentiment_score: Optional[float]
     current_players: Optional[int]
     wishlist_count: Optional[int]
     supported_languages: Optional[str]
 
     def qualifies_for_seed(self, min_reviews: int = MIN_REVIEWS_FOR_SEED) -> bool:
-        """Return True when the game meets minimum review threshold."""
+        """Return True when total_reviews meets the seed threshold (default 50)."""
         return self.total_reviews is not None and self.total_reviews >= min_reviews
 
 
@@ -609,6 +610,7 @@ class SteamAPIClient:
             steam_name=details.steam_name,
             release_date=details.release_date,
             total_reviews=review_summary.total_reviews,
+            positive_rate=review_summary.positive_rate,
             sentiment_score=sentiment_score,
             current_players=current_players,
             wishlist_count=store_page.wishlist_count,
@@ -645,9 +647,13 @@ def persist_game_snapshot(
     min_reviews: int = MIN_REVIEWS_FOR_SEED,
 ) -> bool:
     """
-    Insert one ``Game`` row when the snapshot qualifies and AppID is new.
+    Persist Steam enrichment and optionally seed the ``Game`` dimension.
 
-    Returns True when a row was inserted.
+    When the snapshot qualifies (``total_reviews >= min_reviews``), always
+    appends one ``SteamMetric`` row. Inserts ``Game`` only when ``appid`` is
+    not yet present.
+
+    Returns True when a new ``Game`` row was inserted.
     """
     if not snapshot.qualifies_for_seed(min_reviews):
         logger.debug(
@@ -659,26 +665,55 @@ def persist_game_snapshot(
         )
         return False
 
+    mined_at = dt.datetime.now(dt.timezone.utc)
     existing = session.scalars(
         select(Game).where(Game.appid == snapshot.appid)
     ).first()
-    if existing is not None:
-        logger.debug("Game appid=%s already seeded; skipping.", snapshot.appid)
-        return False
 
-    game = Game(
-        appid=snapshot.appid,
-        steam_name=snapshot.steam_name,
-        release_date=snapshot.release_date,
+    game_inserted = False
+    if existing is None:
+        game = Game(
+            appid=snapshot.appid,
+            steam_name=snapshot.steam_name,
+            release_date=snapshot.release_date,
+        )
+        session.add(game)
+        session.flush()
+        game_row = game
+        game_inserted = True
+        logger.info(
+            "Inserted Game appid=%s steam_name=%r release_date=%s.",
+            snapshot.appid,
+            snapshot.steam_name,
+            snapshot.release_date,
+        )
+    else:
+        game_row = existing
+        logger.debug(
+            "Game appid=%s already seeded; appending SteamMetric only.",
+            snapshot.appid,
+        )
+
+    session.add(
+        SteamMetric(
+            game_id=game_row.id,
+            mined_at=mined_at,
+            total_reviews=snapshot.total_reviews,
+            positive_rate=snapshot.positive_rate,
+            review_sentiment=snapshot.sentiment_score,
+            current_players=snapshot.current_players,
+            wishlist_count=snapshot.wishlist_count,
+            supported_languages=snapshot.supported_languages,
+        )
     )
-    session.add(game)
+    session.flush()
     logger.info(
-        "Inserted Game appid=%s steam_name=%r release_date=%s.",
+        "Inserted SteamMetric for appid=%s game_id=%s mined_at=%s.",
         snapshot.appid,
-        snapshot.steam_name,
-        snapshot.release_date,
+        game_row.id,
+        mined_at.isoformat(),
     )
-    return True
+    return game_inserted
 
 
 def persist_snapshots(

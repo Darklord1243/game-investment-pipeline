@@ -1,6 +1,6 @@
-# Game Investment Potential Predictor
+# Game Engagement Intelligence
 
-**Predictive analytics for game investment using automated multi-platform ETL and ensemble machine learning.** The system mines engagement data from Steam, Twitch, YouTube, and Reddit, engineers 50+ features through SQL-native window functions, and trains a temporal-aware VotingRegressor ensemble — all orchestrated by a weekly GitHub Actions CI/CD pipeline.
+**Cross-platform community engagement and sentiment intelligence for Steam games.** The system mines engagement data from Steam, Twitch, YouTube, and Reddit, engineers 50+ features through SQL-native window functions, and serves a transparent **Engagement Score** (0–100) via a Flask demo webapp. *(Legacy name "Game Investment Potential Predictor" is deprecated — the product is descriptive engagement intelligence, not a sales forecast.)*
 
 ## Architecture & Tech Stack
 
@@ -9,8 +9,9 @@
 | **Database** | SQLite via SQLAlchemy 2.0 ORM (`game_metrics.db`) |
 | **ETL** | Python 3.12, `requests`, `BeautifulSoup`, custom rate-limiters |
 | **Feature engineering** | SQL CTEs with window functions (`PARTITION BY batch_date`) |
-| **ML** | LightGBM, XGBoost, Random Forest → `VotingRegressor` (scikit-learn) |
-| **Serving** | Flask (`app.py` for prediction, `webapp.py` for interactive mining) |
+| **Scoring** | Descriptive engagement index (`src/features/engagement_index.py`) |
+| **ML (Phase 2)** | LightGBM + XGBoost + Random Forest ensemble — gated until external labels exist |
+| **Serving** | Flask + Jinja (`src/api/webapp.py`) |
 | **CI/CD** | GitHub Actions — weekly cron + `workflow_dispatch` |
 
 ## The ETL Layer
@@ -19,7 +20,7 @@ Each platform miner is a self-contained module that writes directly to the norma
 
 - **Strictly typed DataClasses** — `GameSnapshot`, `StreamSnapshot`, `VideoSnapshot`, `PostSnapshot` are frozen, `slots=True` dataclasses that serve as the single contract between API ingestion and ORM persistence.
 - **Custom RateLimiters** — `SteamRateLimiter`, `TwitchRateLimiter`, `YouTubeRateLimiter`, and `RedditRateLimiter` implement sliding-window pacing with exponential backoff. Every API call is gated.
-- **Seeder-first design** — `steam_data_miner.py` seeds the canonical `Game` dimension table before any engagement miner runs, ensuring referential integrity across all four platforms.
+- **Seeder-first design** — `steam_data_miner.py` seeds the canonical `Game` dimension table and appends `SteamMetric` time-series rows before engagement miners run.
 - **Checkpointing** — miners query the database for the latest record per game and ingest only delta data, making each run incremental and idempotent.
 
 ## SQL Feature Engineering
@@ -32,24 +33,25 @@ The `DatabaseFeatureEngineer` class (`src/features/sql_feature_engineer.py`) bui
 - **Phase 2** — Derived features: viral velocity, cross-platform synergy, growth momentum, sentiment authenticity, creator concentration.
 - **Phase 3** — Competitive scores: `market_share`, `platform_dominance`, and `competitive_score`, each computed using `SUM(...) OVER (PARTITION BY batch_date)` so denominators are scoped to the **current batch only**, never peeking at future data.
 
-Custom SQLite UDFs (`sqrt`, `power`) are registered at query time to support population standard deviation and root-cube expressions that SQLite lacks natively.
+## Engagement Score (UI)
 
-## Model Training & Validation
+The descriptive **Engagement Score** is computed by `src/features/engagement_index.py` — a weighted, batch-normalized composite of 13 cross-platform features. It is **not** ML supervision and does not predict sales or ROI. The webapp exposes:
 
-`GameInvestmentPredictor` in `src/models/model_trainer.py`:
+- `/sandbox` — offline manual-input scoring (quota-proof demo)
+- `/predict` — live mine with cached-sample fallback
+- `/samples` — 10 cached demo games
 
-- **Target construction** — A 16-feature min-max normalized weighted composite scaled to 1–100 (`target_score`), with normalization statistics fit **only on the training split**.
-- **Temporal split** — Train/test separation uses `release_date` quantile cutoff (80/20 default). **No random shuffling.** Older releases train, newer releases test — mirroring real-world deployment where you predict the future from the past.
-- **Ensemble** — `VotingRegressor` averaging LightGBM (300 estimators), XGBoost (300 estimators), and Random Forest (200 estimators), all with fixed `random_state=42`.
-- **Persistence** — Best model, feature names, and `StandardScaler` are serialized to `enhanced_model_artifacts.pkl` via `joblib` and loaded by both Flask inference apps.
+## Model Training (Phase 2 — currently gated)
+
+`GameInvestmentPredictor` in `src/models/model_trainer.py` skips training when no external `target_variable_score` label exists. Circular `target_score` composite training is disabled until review-velocity labels are available.
 
 ## Continuous Deployment (MLOps)
 
 The `.github/workflows/weekly_pipeline.yml` workflow acts as a **living deployment**:
 
 1. **Triggers** — Every Monday at 00:00 UTC, or on-demand via `workflow_dispatch`.
-2. **Execution order** — Steam (seed) → Twitch → YouTube → Reddit → Model Trainer.
-3. **Auto-commit** — Updated `data/game_metrics.db` and `enhanced_model_artifacts.pkl` are committed back to the repository with the message `chore(data): automated weekly pipeline run`.
+2. **Execution order** — Steam (seed) → Twitch → YouTube → Reddit → Model Trainer (skips if no external label).
+3. **Artifact publishing** — Updated `data/game_metrics.db` is pushed to **S3**; `enhanced_model_artifacts.pkl` and `deployment_summary.json` are published to **GitHub Releases** (model registry). Artifacts are **not** auto-committed back to the repository.
 
 Fresh engagement data flows into the model every week with zero manual intervention.
 
@@ -69,8 +71,8 @@ python src/data_collection/twitch_miner.py
 python src/data_collection/youtube_data_miner.py
 python src/data_collection/reddit_data_miner.py
 
-# 4. Train the model
-python src/models/model_trainer.py
+# 4. Start the demo webapp
+python src/api/webapp.py
 ```
 
-Set `DATABASE_URL=sqlite:///data/game_metrics.db` in your environment (or rely on the default in `src/database/models.py`). Run the Flask apps with `python src/api/app.py` or `python src/api/webapp.py` to serve predictions.
+Set `DATABASE_URL=sqlite:///data/game_metrics.db` in your environment (or rely on the default in `src/database/models.py`).

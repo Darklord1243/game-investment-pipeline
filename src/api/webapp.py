@@ -1,9 +1,8 @@
 """
-Database-backed game investment inference API.
+Game Engagement Intelligence API.
 
-Single Flask entry point: mines today's metrics for one Steam title, builds
-SQL features, and returns a standardized ``target_score`` (1–100) with top
-feature contributions.
+Flask + Jinja demo backend: offline sandbox scoring via the descriptive
+engagement index, live mining with cached fallback, and explainability panel.
 """
 
 from __future__ import annotations
@@ -16,19 +15,16 @@ import sys
 from pathlib import Path
 from typing import Any, Final, Optional
 
-import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, render_template, request
 from googleapiclient.errors import HttpError
 from prawcore.exceptions import TooManyRequests
 from requests.exceptions import HTTPError as RequestsHTTPError
-from sklearn.ensemble import VotingRegressor
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-# Ensure project root is importable when launched as ``python src/api/webapp.py``.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
@@ -61,95 +57,39 @@ from src.data_collection.youtube_data_miner import (  # noqa: E402
     run_single_game as run_youtube_single_game,
 )
 from src.database.models import Game, SessionLocal  # noqa: E402
-from src.features.sql_feature_engineer import DatabaseFeatureEngineer  # noqa: E402
-from src.models.model_trainer import (  # noqa: E402
-    DEFAULT_ARTIFACT_PATH,
-    GameInvestmentPredictor,
-    ModelArtifact,
+from src.features.engagement_index import (  # noqa: E402
+    DEFAULT_DEMO_SAMPLES_PATH,
+    DISCLAIMER,
+    ENGAGEMENT_INDEX_SPEC,
+    LABEL_DEFINITION,
+    compute_engagement_details,
+    compute_engagement_score,
+    default_reference_stats,
+    driver_plain_language,
+    load_demo_samples,
+    score_to_tier,
 )
+from src.features.sql_feature_engineer import DatabaseFeatureEngineer  # noqa: E402
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-ARTIFACT_PATH: Final[Path] = _PROJECT_ROOT / DEFAULT_ARTIFACT_PATH
-TOP_FEATURE_COUNT: Final[int] = 10
 STEAM_NAME_MAX_LEN: Final[int] = 512
 STEAM_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^[\w\s\-:''.,&!()+®™]+$",
     re.UNICODE,
 )
+INDEX_COMPONENTS: Final[tuple[str, ...]] = tuple(name for name, _ in ENGAGEMENT_INDEX_SPEC)
+DEMO_SAMPLES_PATH: Final[Path] = DEFAULT_DEMO_SAMPLES_PATH
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Game Investment Inference</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2.5rem; background: #f4f6f8; color: #1a1a1a; }
-    .card { max-width: 640px; background: #fff; padding: 1.5rem 2rem; border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    label { display: block; font-weight: 600; margin-bottom: .35rem; }
-    input[type=text] { width: 100%; padding: .55rem .65rem; border: 1px solid #ccc;
-                      border-radius: 4px; box-sizing: border-box; }
-    button { margin-top: 1rem; padding: .55rem 1.2rem; background: #1565c0; color: #fff;
-             border: none; border-radius: 4px; cursor: pointer; }
-    button:disabled { opacity: .6; cursor: wait; }
-    pre { margin-top: 1.25rem; background: #f0f4f8; padding: 1rem; border-radius: 6px;
-          overflow-x: auto; font-size: .85rem; }
-    .error { color: #b71c1c; margin-top: 1rem; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Game Investment Inference</h1>
-    <p>Submit a Steam store title. The API mines today's metrics, engineers SQL features,
-       and returns a <code>target_score</code> (1–100).</p>
-    <form id="predict-form">
-      <label for="steam_name">Steam game name</label>
-      <input id="steam_name" name="steam_name" type="text" required
-             placeholder="e.g. Counter-Strike 2" maxlength="512">
-      <button type="submit" id="submit-btn">Predict</button>
-    </form>
-    <div id="error" class="error" hidden></div>
-    <pre id="result" hidden></pre>
-  </div>
-  <script>
-    document.getElementById('predict-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('submit-btn');
-      const errEl = document.getElementById('error');
-      const outEl = document.getElementById('result');
-      errEl.hidden = true;
-      outEl.hidden = true;
-      btn.disabled = true;
-      try {
-        const steam_name = document.getElementById('steam_name').value.trim();
-        const resp = await fetch('/predict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ steam_name }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          errEl.textContent = data.error || resp.statusText;
-          errEl.hidden = false;
-        } else {
-          outEl.textContent = JSON.stringify(data, null, 2);
-          outEl.hidden = false;
-        }
-      } catch (err) {
-        errEl.textContent = String(err);
-        errEl.hidden = false;
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  </script>
-</body>
-</html>
-"""
+SANDBOX_BOUNDS: Final[dict[str, tuple[float, float]]] = {
+    "youtube_engagement_rate": (0.0, 1.0),
+    "cross_platform_engagement_rate": (0.0, 1.0),
+    "youtube_avg_sentiment": (-1.0, 1.0),
+    "reddit_avg_sentiment": (-1.0, 1.0),
+    "platform_presence": (0.0, 3.0),
+}
 
 
 class GameNotFoundError(Exception):
@@ -173,6 +113,11 @@ def configure_logging() -> None:
 def utc_today() -> dt.date:
     """Return the current UTC calendar date (batch key)."""
     return dt.datetime.now(dt.timezone.utc).date()
+
+
+def utc_now_iso() -> str:
+    """Return current UTC timestamp for freshness display."""
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def validate_steam_name(raw: Optional[str]) -> str:
@@ -347,103 +292,154 @@ def filter_game_row(features: pd.DataFrame, steam_name: str) -> pd.DataFrame:
     return features.loc[mask]
 
 
-def top_contributing_features(
-    model: VotingRegressor,
-    feature_names: list[str],
-    x_scaled: np.ndarray,
+def extract_index_features(row: pd.Series) -> dict[str, float]:
+    """Pull engagement-index components from a feature-matrix row."""
+    features: dict[str, float] = {}
+    for name in INDEX_COMPONENTS:
+        raw = row.get(name, 0.0)
+        features[name] = float(pd.to_numeric(raw, errors="coerce") or 0.0)
+    return features
+
+
+def sentiment_bar_width(value: float) -> float:
+    """Map sentiment in [-1, 1] to a 0–100 bar width."""
+    return min(100.0, max(0.0, (float(value) + 1.0) * 50.0))
+
+
+def build_result_context(
     *,
-    top_n: int = TOP_FEATURE_COUNT,
-) -> dict[str, float]:
+    steam_name: str,
+    features: dict[str, float],
+    freshness: str,
+    mined_at: str,
+    reference_stats: Optional[dict[str, dict[str, float]]] = None,
+    cache_banner: Optional[str] = None,
+) -> dict[str, Any]:
+    """Build explain-panel context from feature values."""
+    ref = reference_stats or default_reference_stats()
+    details = compute_engagement_details(features, ref)[0]
+    top_drivers = [
+        driver_plain_language(contrib)
+        for contrib in details.drivers[:3]
+    ]
+    return {
+        "steam_name": steam_name,
+        "engagement_score": details.engagement_score,
+        "tier": details.tier,
+        "top_drivers": top_drivers,
+        "youtube_sentiment": features.get("youtube_avg_sentiment", 0.0),
+        "reddit_sentiment": features.get("reddit_avg_sentiment", 0.0),
+        "youtube_bar": sentiment_bar_width(features.get("youtube_avg_sentiment", 0.0)),
+        "reddit_bar": sentiment_bar_width(features.get("reddit_avg_sentiment", 0.0)),
+        "freshness": freshness,
+        "mined_at": mined_at,
+        "cache_banner": cache_banner,
+    }
+
+
+def default_sandbox_values() -> dict[str, float]:
+    """Empty-ish defaults for the sandbox form."""
+    return {name: 0.0 for name in INDEX_COMPONENTS}
+
+
+def parse_sandbox_form(form: Any) -> dict[str, float]:
     """
-    Rank features by average tree importance weighted by scaled magnitude.
-
-    Returns:
-        Mapping of feature name → contribution score (descending, top *top_n*).
-    """
-    if not feature_names or x_scaled.size == 0:
-        return {}
-
-    importances = np.zeros(len(feature_names), dtype=np.float64)
-    estimator_count = 0
-    for _name, estimator in model.named_estimators_.items():
-        raw = getattr(estimator, "feature_importances_", None)
-        if raw is None:
-            continue
-        importances += np.asarray(raw, dtype=np.float64)
-        estimator_count += 1
-
-    if estimator_count == 0 or importances.sum() <= 0:
-        return {}
-
-    importances /= estimator_count
-    row = np.asarray(x_scaled, dtype=np.float64).reshape(-1)
-    if row.shape[0] != len(feature_names):
-        row = row[: len(feature_names)]
-    contributions = importances[: row.shape[0]] * np.abs(row)
-    order = np.argsort(contributions)[::-1]
-    result: dict[str, float] = {}
-    for idx in order[:top_n]:
-        score = float(contributions[idx])
-        if score <= 0:
-            break
-        result[feature_names[idx]] = round(score, 6)
-    return result
-
-
-def build_predictor(artifact: ModelArtifact) -> GameInvestmentPredictor:
-    """Hydrate a :class:`GameInvestmentPredictor` from a loaded artifact."""
-    predictor = GameInvestmentPredictor(artifact_path=ARTIFACT_PATH)
-    predictor.best_model = artifact.best_model
-    predictor.feature_names = list(artifact.feature_names)
-    predictor.scaler = artifact.scaler
-    return predictor
-
-
-def run_inference(steam_name: str, batch_date: dt.date) -> dict[str, Any]:
-    """
-    Full inference pipeline: mine → feature matrix → predict → explain.
-
-    Returns:
-        JSON-serializable response payload.
+    Parse and validate sandbox form fields.
 
     Raises:
-        GameNotFoundError: Title missing from Steam or today's feature matrix.
-        QuotaExhaustedError: Platform quota exhausted.
-        FileNotFoundError: Model artifact missing.
-        RuntimeError: Model not loaded or prediction failed.
+        ValueError: On missing or out-of-range fields.
     """
+    values: dict[str, float] = {}
+    for name in INDEX_COMPONENTS:
+        raw = form.get(name)
+        if raw is None or str(raw).strip() == "":
+            raise ValueError(f"Missing required field: {name}")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid numeric value for {name}.") from exc
+        if name in SANDBOX_BOUNDS:
+            low, high = SANDBOX_BOUNDS[name]
+            if value < low or value > high:
+                raise ValueError(f"{name} must be between {low} and {high}.")
+        if value < 0 and name not in SANDBOX_BOUNDS:
+            raise ValueError(f"{name} must be non-negative.")
+        values[name] = value
+    return values
+
+
+def find_cached_sample(query: str) -> dict[str, Any]:
+    """Return the best matching cached demo sample for *query*."""
+    payload = load_demo_samples()
+    samples = payload.get("samples", [])
+    if not samples:
+        raise FileNotFoundError("No cached samples available.")
+
+    normalized = query.strip().lower()
+    for sample in samples:
+        if str(sample.get("steam_name", "")).strip().lower() == normalized:
+            return sample
+    for sample in samples:
+        if normalized in str(sample.get("steam_name", "")).strip().lower():
+            return sample
+    return samples[0]
+
+
+def cached_result_for_query(query: str, reason: str) -> dict[str, Any]:
+    """Build a cached-fallback result payload."""
+    sample = find_cached_sample(query)
+    steam_name = str(sample["steam_name"])
+    features = dict(sample["features"])
+    banner = (
+        f"Live mining unavailable ({reason}). Showing the nearest cached sample: "
+        f'"{steam_name}".'
+    )
+    return build_result_context(
+        steam_name=steam_name,
+        features=features,
+        freshness="CACHED",
+        mined_at=str(sample.get("mined_at", "cached")),
+        cache_banner=banner,
+    )
+
+
+def run_live_engagement(steam_name: str, batch_date: dt.date) -> dict[str, Any]:
+    """Mine live data and score via the engagement index."""
     canonical_name = run_platform_miners(steam_name)
 
     with SessionLocal() as session:
-        features = DatabaseFeatureEngineer().build_feature_matrix(session, batch_date)
+        features_df = DatabaseFeatureEngineer().build_feature_matrix(session, batch_date)
 
-    game_df = filter_game_row(features, canonical_name)
+    game_df = filter_game_row(features_df, canonical_name)
     if game_df.empty:
         raise GameNotFoundError(
-            f"No feature row for {canonical_name!r} on batch_date={batch_date.isoformat()}. "
-            "Mining may have produced no metrics for today."
+            f"No feature row for {canonical_name!r} on batch_date={batch_date.isoformat()}."
         )
 
-    artifact = GameInvestmentPredictor.load_artifact(ARTIFACT_PATH)
-    predictor = build_predictor(artifact)
-
-    x = game_df.reindex(columns=predictor.feature_names, fill_value=0.0).astype("float64")
-    x_scaled = predictor.scaler.transform(x)  # type: ignore[union-attr]
-    raw_score = float(predictor.predict(game_df)[0])
-    target_score = round(float(np.clip(raw_score, 1.0, 100.0)), 2)
-
-    top_features = top_contributing_features(
-        artifact.best_model,
-        predictor.feature_names,
-        x_scaled,
+    row = game_df.iloc[0]
+    index_features = extract_index_features(row)
+    return build_result_context(
+        steam_name=canonical_name,
+        features=index_features,
+        freshness="LIVE",
+        mined_at=utc_now_iso(),
     )
 
+
+def wants_json_response() -> bool:
+    """True when the client expects a JSON body (API/tests)."""
+    if request.args.get("format") == "json":
+        return True
+    accept = request.headers.get("Accept", "")
+    return "application/json" in accept and "text/html" not in accept
+
+
+def template_context(**extra: Any) -> dict[str, Any]:
+    """Inject shared footer strings into every template."""
     return {
-        "steam_name": canonical_name,
-        "requested_name": steam_name,
-        "batch_date": batch_date.isoformat(),
-        "target_score": target_score,
-        "top_features": top_features,
+        "label_definition": LABEL_DEFINITION,
+        "disclaimer": DISCLAIMER,
+        **extra,
     }
 
 
@@ -456,54 +452,191 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 
 @app.route("/", methods=["GET"])
 def index() -> str:
-    """Minimal UI for manual inference requests."""
-    return render_template_string(HTML_TEMPLATE)
+    """Landing page with links to analyze and sandbox flows."""
+    return render_template("index.html", **template_context())
 
 
-@app.route("/predict", methods=["POST"])
-def predict() -> tuple[Any, int]:
-    """
-    Mine today's metrics for one game and return investment potential.
+@app.route("/sandbox", methods=["GET", "POST"])
+def sandbox() -> Any:
+    """Offline manual-input engagement scoring (no network)."""
+    payload = load_demo_samples()
+    sample_list = payload.get("samples", [])
+    values = default_sandbox_values()
+    selected_sample: Optional[str] = None
+    error: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
 
-    Request JSON: ``{"steam_name": "<Steam store title>"}``
+    if request.method == "GET":
+        prefill = request.args.get("sample_prefill", "").strip()
+        if prefill:
+            for sample in sample_list:
+                if sample.get("steam_name") == prefill:
+                    values = dict(sample["features"])
+                    selected_sample = prefill
+                    break
 
-    Response JSON: ``target_score`` (1–100) and ``top_features``.
-    """
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "Request body must be JSON."}), 400
+    if request.method == "POST":
+        selected_sample = request.form.get("sample_prefill") or None
+        if selected_sample:
+            for sample in sample_list:
+                if sample.get("steam_name") == selected_sample:
+                    values = dict(sample["features"])
+                    break
+        try:
+            values = parse_sandbox_form(request.form)
+            result = build_result_context(
+                steam_name=selected_sample or "Sandbox input",
+                features=values,
+                freshness="CACHED",
+                mined_at="offline",
+            )
+        except ValueError as exc:
+            error = str(exc)
+            if wants_json_response():
+                return jsonify({"error": error}), 400
+            return (
+                render_template(
+                    "sandbox.html",
+                    **template_context(
+                        samples=sample_list,
+                        values=values,
+                        selected_sample=selected_sample,
+                        error=error,
+                        result=None,
+                    ),
+                ),
+                400,
+            )
+
+    return render_template(
+        "sandbox.html",
+        **template_context(
+            samples=sample_list,
+            values=values,
+            selected_sample=selected_sample,
+            error=error,
+            result=result,
+        ),
+    )
+
+
+@app.route("/samples", methods=["GET"])
+def samples() -> Any:
+    """List cached demo games."""
+    payload = load_demo_samples()
+    rows = []
+    for sample in payload.get("samples", []):
+        score = float(sample.get("precomputed_engagement_score", 0.0))
+        rows.append(
+            {
+                "steam_name": sample.get("steam_name"),
+                "precomputed_engagement_score": score,
+                "tier": score_to_tier(score),
+                "narrative": sample.get("narrative", ""),
+            }
+        )
+    if wants_json_response():
+        return jsonify({"samples": rows, "count": len(rows)}), 200
+    return render_template("samples.html", **template_context(samples=rows))
+
+
+@app.route("/predict", methods=["GET", "POST"])
+def predict() -> Any:
+    """Live mine → engagement index, with cached fallback on quota/404."""
+    if request.method == "GET" and not request.args.get("steam_name"):
+        return render_template("predict.html", **template_context())
+
+    steam_name_raw = None
+    if request.method == "POST":
+        if request.is_json:
+            body = request.get_json(silent=True) or {}
+            steam_name_raw = body.get("steam_name")
+        else:
+            steam_name_raw = request.form.get("steam_name")
+    else:
+        steam_name_raw = request.args.get("steam_name")
 
     try:
-        steam_name = validate_steam_name(payload.get("steam_name"))
+        steam_name = validate_steam_name(steam_name_raw)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        if wants_json_response():
+            return jsonify({"error": str(exc)}), 400
+        return render_template(
+            "predict.html",
+            **template_context(error=str(exc)),
+        )
 
     batch_date = utc_today()
+    result: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
 
     try:
-        result = run_inference(steam_name, batch_date)
-        return jsonify(result), 200
+        result = run_live_engagement(steam_name, batch_date)
     except GameNotFoundError as exc:
         logger.warning("Game not found for %r: %s", steam_name, exc)
-        return jsonify({"error": str(exc)}), 404
+        if wants_json_response():
+            result = cached_result_for_query(steam_name, "unknown game")
+            result["requested_name"] = steam_name
+            return jsonify(result), 200
+        result = cached_result_for_query(steam_name, "unknown game")
     except QuotaExhaustedError as exc:
         logger.warning("Quota exhausted for %r: %s", steam_name, exc)
-        return jsonify({"error": str(exc)}), 429
-    except FileNotFoundError as exc:
-        logger.error("Model artifact missing: %s", exc)
-        return jsonify({"error": str(exc)}), 503
-    except (RuntimeError, ValueError, KeyError) as exc:
+        if wants_json_response():
+            result = cached_result_for_query(steam_name, "quota exhausted")
+            result["requested_name"] = steam_name
+            return jsonify(result), 200
+        result = cached_result_for_query(steam_name, "quota exhausted")
+    except Exception as exc:
         logger.exception("Inference failed for %r", steam_name)
-        return jsonify({"error": f"Inference failed: {exc}"}), 500
+        message = f"Inference failed: {exc}"
+        if wants_json_response():
+            return jsonify({"error": message}), 500
+        error = message
+
+    if wants_json_response() and result is not None:
+        payload = dict(result)
+        payload["requested_name"] = steam_name
+        payload["batch_date"] = batch_date.isoformat()
+        return jsonify(payload), 200
+
+    return render_template(
+        "predict.html",
+        **template_context(steam_name=steam_name, result=result, error=error),
+    )
+
+
+@app.route("/predict/form", methods=["GET"])
+def predict_form() -> str:
+    """HTML form entry point for live analysis."""
+    return render_template("predict.html", **template_context())
 
 
 @app.route("/health", methods=["GET"])
 def health() -> tuple[Any, int]:
-    """Liveness probe; reports artifact availability."""
-    artifact_ok = ARTIFACT_PATH.is_file()
-    status = "ok" if artifact_ok else "degraded"
-    code = 200 if artifact_ok else 503
-    return jsonify({"status": status, "artifact_loaded": artifact_ok}), code
+    """Liveness probe; requires demo samples and engagement index module."""
+    demo_ok = DEMO_SAMPLES_PATH.is_file()
+    index_ok = True
+    try:
+        compute_engagement_score(
+            {name: 0.0 for name in INDEX_COMPONENTS},
+            default_reference_stats(),
+        )
+    except Exception as exc:
+        logger.error("Engagement index health check failed: %s", exc)
+        index_ok = False
+
+    status = "ok" if demo_ok and index_ok else "degraded"
+    code = 200 if demo_ok and index_ok else 503
+    return (
+        jsonify(
+            {
+                "status": status,
+                "demo_samples_available": demo_ok,
+                "engagement_index_available": index_ok,
+            }
+        ),
+        code,
+    )
 
 
 if __name__ == "__main__":
