@@ -94,7 +94,18 @@ jobs:
           aws s3 cp data/game_metrics.db \
             "s3://${{ secrets.AWS_S3_BUCKET }}/game-metrics/${{ steps.ts.outputs.stamp }}/game_metrics.db"
 
+      - name: Check model artifacts
+        id: model_artifacts
+        run: |
+          if [ -f enhanced_model_artifacts.pkl ] && [ -f deployment_summary.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Model artifacts missing; skipping GitHub Release (training is gated)."
+          fi
+
       - name: Publish model artifact to GitHub Releases (model registry)
+        if: steps.model_artifacts.outputs.present == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "model-${{ steps.ts.outputs.stamp }}"
