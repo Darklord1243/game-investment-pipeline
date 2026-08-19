@@ -16,7 +16,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Mapping, Sequence, Union
+from typing import Any, Final, Mapping, Sequence, Union, cast
 
 import pandas as pd
 
@@ -132,7 +132,12 @@ def load_demo_samples(path: Path | None = None) -> dict[str, Any]:
     if not demo_path.is_file():
         raise FileNotFoundError(f"Demo samples not found: {demo_path}")
     with demo_path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+        payload: Any = json.load(handle)
+    if not isinstance(payload, dict):
+        raise TypeError(
+            f"Demo samples root must be a JSON object, got {type(payload).__name__}."
+        )
+    return cast(dict[str, Any], payload)
 
 
 def default_reference_stats() -> dict[str, dict[str, float]]:

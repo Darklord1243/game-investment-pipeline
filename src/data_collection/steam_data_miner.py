@@ -319,7 +319,7 @@ def parse_review_sentiment(
     if not texts:
         return None
 
-    scores = [analyzer.polarity_scores(text)["compound"] for text in texts]
+    scores = [float(analyzer.polarity_scores(text)["compound"]) for text in texts]
     return round(sum(scores) / len(scores), 3)
 
 
