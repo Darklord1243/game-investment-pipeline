@@ -475,7 +475,7 @@ class GameInvestmentPredictor:
 
         x = df.reindex(columns=self.feature_names, fill_value=0.0).astype("float64")
         x_scaled = self.scaler.transform(x)
-        return self.best_model.predict(x_scaled)
+        return np.asarray(self.best_model.predict(x_scaled))
 
 
 def build_training_frame(

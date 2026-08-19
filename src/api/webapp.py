@@ -372,17 +372,20 @@ def find_cached_sample(query: str) -> dict[str, Any]:
     """Return the best matching cached demo sample for *query*."""
     payload = load_demo_samples()
     samples = payload.get("samples", [])
-    if not samples:
+    if not isinstance(samples, list) or not samples:
         raise FileNotFoundError("No cached samples available.")
 
     normalized = query.strip().lower()
     for sample in samples:
-        if str(sample.get("steam_name", "")).strip().lower() == normalized:
+        if isinstance(sample, dict) and str(sample.get("steam_name", "")).strip().lower() == normalized:
             return sample
     for sample in samples:
-        if normalized in str(sample.get("steam_name", "")).strip().lower():
+        if isinstance(sample, dict) and normalized in str(sample.get("steam_name", "")).strip().lower():
             return sample
-    return samples[0]
+    fallback = samples[0]
+    if not isinstance(fallback, dict):
+        raise TypeError("Cached sample is not a JSON object.")
+    return fallback
 
 
 def cached_result_for_query(query: str, reason: str) -> dict[str, Any]:

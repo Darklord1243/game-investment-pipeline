@@ -29,6 +29,8 @@ jobs:
   pipeline:
     needs: static-analysis
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout repository
@@ -47,7 +49,7 @@ jobs:
       - name: Seed database & mine Steam data
         env:
           DATABASE_URL: sqlite:///data/game_metrics.db
-        run: python src/data_collection/steam_data_miner.py
+        run: python src/data_collection/steam_data_miner.py --limit 50
 
       - name: Mine Twitch data
         env:
@@ -92,7 +94,18 @@ jobs:
           aws s3 cp data/game_metrics.db \
             "s3://${{ secrets.AWS_S3_BUCKET }}/game-metrics/${{ steps.ts.outputs.stamp }}/game_metrics.db"
 
+      - name: Check model artifacts
+        id: model_artifacts
+        run: |
+          if [ -f enhanced_model_artifacts.pkl ] && [ -f deployment_summary.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Model artifacts missing; skipping GitHub Release (training is gated)."
+          fi
+
       - name: Publish model artifact to GitHub Releases (model registry)
+        if: steps.model_artifacts.outputs.present == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "model-${{ steps.ts.outputs.stamp }}"

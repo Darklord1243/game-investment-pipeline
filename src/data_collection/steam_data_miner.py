@@ -319,7 +319,7 @@ def parse_review_sentiment(
     if not texts:
         return None
 
-    scores = [analyzer.polarity_scores(text)["compound"] for text in texts]
+    scores = [float(analyzer.polarity_scores(text)["compound"]) for text in texts]
     return round(sum(scores) / len(scores), 3)
 
 
@@ -891,8 +891,12 @@ def run_full_seed(
     max_workers: int,
     batch_size: int,
     min_reviews: int,
+    limit: Optional[int] = None,
 ) -> None:
-    """Seed all Steam AppIDs not yet present in the database."""
+    """Seed Steam AppIDs not yet present in the database.
+
+    When ``limit`` is set, only the first ``limit`` pending AppIDs are processed.
+    """
     list_client = SteamAPIClient(limiter=limiter, session=requests.Session())
     entries = list_client.fetch_app_list()
     all_appids = [entry.appid for entry in entries]
@@ -907,6 +911,9 @@ def run_full_seed(
         len(mined_appids),
         len(pending_appids),
     )
+    if limit is not None:
+        pending_appids = pending_appids[:limit]
+        logger.info("Capping seed to %d pending AppIDs (--limit).", limit)
 
     total_inserted = 0
     for start in range(0, len(pending_appids), batch_size):
@@ -956,6 +963,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         default=MIN_REVIEWS_FOR_SEED,
         help=f"Minimum total_reviews required to insert (default: {MIN_REVIEWS_FOR_SEED}).",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max pending AppIDs to process this run (default: no cap).",
+    )
     return parser.parse_args(argv)
 
 
@@ -970,6 +983,8 @@ def main(argv: Optional[list[str]] = None) -> None:
         raise ValueError("--batch-size must be >= 1.")
     if args.min_reviews < 0:
         raise ValueError("--min-reviews must be >= 0.")
+    if args.limit is not None and args.limit < 1:
+        raise ValueError("--limit must be >= 1.")
 
     ensure_schema()
     limiter = SteamRateLimiter()
@@ -984,6 +999,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         max_workers=args.max_workers,
         batch_size=args.batch_size,
         min_reviews=args.min_reviews,
+        limit=args.limit,
     )
 
 

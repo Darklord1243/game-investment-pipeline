@@ -184,3 +184,51 @@ def test_build_game_snapshot_includes_positive_rate():
     assert snapshot is not None
     assert snapshot.positive_rate == 90.0
     assert snapshot.total_reviews == 500
+
+
+def test_parse_args_limit_default_is_none():
+    from src.data_collection.steam_data_miner import parse_args
+
+    args = parse_args([])
+    assert args.limit is None
+
+
+def test_parse_args_limit():
+    from src.data_collection.steam_data_miner import parse_args
+
+    args = parse_args(["--limit", "25"])
+    assert args.limit == 25
+
+
+def test_run_full_seed_caps_pending_appids():
+    from src.data_collection.steam_data_miner import run_full_seed
+
+    processed: list[int] = []
+    entries = [SteamAppListEntry(appid=i, name=str(i)) for i in range(10)]
+
+    with patch("src.data_collection.steam_data_miner.SteamAPIClient") as mock_client_cls:
+        mock_client_cls.return_value.fetch_app_list.return_value = entries
+        with patch("src.data_collection.steam_data_miner.db_session") as mock_db:
+            mock_db.return_value.__enter__.return_value = MagicMock()
+            with patch(
+                "src.data_collection.steam_data_miner.get_mined_appids",
+                return_value=set(),
+            ):
+                with patch(
+                    "src.data_collection.steam_data_miner.process_appid_batch"
+                ) as mock_proc:
+
+                    def capture(batch, **kwargs):
+                        processed.extend(batch)
+                        return 0
+
+                    mock_proc.side_effect = capture
+                    run_full_seed(
+                        limiter=MagicMock(),
+                        max_workers=1,
+                        batch_size=100,
+                        min_reviews=50,
+                        limit=3,
+                    )
+
+    assert processed == [0, 1, 2]

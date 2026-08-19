@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import math
-from typing import TYPE_CHECKING, Any, Final, Sequence
+from typing import Any, Final, Sequence
 
 import pandas as pd
 from sqlalchemy import Float, Select, case, func, literal, select, union
@@ -19,9 +19,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.database.models import Game, RedditMetric, TwitchMetric, YouTubeMetric
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +227,7 @@ def _scalar_max(
     return case((left > right_val, left), else_=right_val)
 
 
-def _pop_stddev(column: ColumnElement[Any]) -> ColumnElement[Any]:
+def _pop_stddev(column: Any) -> ColumnElement[Any]:
     """
     Population standard deviation (numpy ddof=0).
 
@@ -306,7 +303,7 @@ class DatabaseFeatureEngineer:
             day_start,
             day_end,
         )
-        rows = session.execute(stmt).mappings().all()
+        rows: Sequence[Any] = list(session.execute(stmt).mappings().all())
         return self._to_typed_dataframe(rows, batch_date)
 
     def _build_statement(
@@ -879,7 +876,7 @@ class DatabaseFeatureEngineer:
 
     @staticmethod
     def _to_typed_dataframe(
-        rows: Sequence[Mapping[str, Any]],
+        rows: Sequence[Any],
         batch_date: dt.date,
     ) -> pd.DataFrame:
         """Materialize query rows into a strictly typed, column-ordered DataFrame."""
