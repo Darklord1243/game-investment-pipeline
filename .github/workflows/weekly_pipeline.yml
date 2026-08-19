@@ -49,7 +49,7 @@ jobs:
       - name: Seed database & mine Steam data
         env:
           DATABASE_URL: sqlite:///data/game_metrics.db
-        run: python src/data_collection/steam_data_miner.py
+        run: python src/data_collection/steam_data_miner.py --limit 50
 
       - name: Mine Twitch data
         env:
