@@ -99,7 +99,11 @@ class PostSnapshot:
 
 
 class RedditRateLimiter(BaseRateLimiter):
-    """Fixed-delay pacing for Reddit API calls, with exponential backoff from base."""
+    """Fixed-delay pacing for Reddit API calls.
+
+    The exponential backoff for this platform lives in the miner's retry loops
+    (``INITIAL_BACKOFF_SECONDS`` doubling to ``MAX_BACKOFF_SECONDS``), not here.
+    """
 
     def __init__(self, delay_seconds: float = REQUEST_DELAY_SECONDS) -> None:
         super().__init__()
