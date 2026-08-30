@@ -10,6 +10,7 @@ The variable names below are exact. Use them verbatim: they must match
 
 ## Contents
 
+- [Steam](#steam)
 - [Twitch](#twitch)
 - [YouTube](#youtube)
 - [Reddit](#reddit)
@@ -20,6 +21,20 @@ The variable names below are exact. Use them verbatim: they must match
 - [Verifying everything is wired up](#verifying-everything-is-wired-up)
 
 ---
+
+## Steam
+
+**Variable:** `STEAM_API_KEY`
+
+Valve removed `ISteamApps/GetAppList/v2` (it now returns HTTP 404). The miner
+uses `IStoreService/GetAppList/v1`, which requires any Steam Web API key —
+a community key is enough; this is not a Steamworks publisher key.
+
+1. Go to [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)
+   while logged into Steam.
+2. Register a key for this project (domain can be `localhost`).
+3. Copy the key into `.env` as `STEAM_API_KEY` and add the same name as a
+   GitHub Actions repository secret.
 
 ## Twitch
 
@@ -158,6 +173,7 @@ Add one secret per name below, pasting only the raw value (no quotes, no
 in "Secret"):
 
 ```
+STEAM_API_KEY
 TWITCH_CLIENT_ID
 TWITCH_CLIENT_SECRET
 YOUTUBE_API_KEY
@@ -201,7 +217,7 @@ workflow, so they don't need to be added as repository secrets.
 ## Verifying everything is wired up
 
 1. In GitHub: **Settings → Secrets and variables → Actions** — confirm all
-   11 secrets listed above are present (values aren't visible again once
+   12 secrets listed above are present (values aren't visible again once
    saved, only names).
 2. Re-enable the workflow if it shows as disabled (**Actions** tab → select
    *Weekly ETL & ML Pipeline* → **Enable workflow** if prompted).
@@ -214,6 +230,7 @@ workflow, so they don't need to be added as repository secrets.
      error means a secret is missing or misnamed — check spelling against
      the list above).
    - AWS steps either publish successfully or skip cleanly if AWS secrets
-     aren't fully configured yet.
+     aren't fully configured yet (see the AWS-credential gating fix in the
+     pipeline-blockers PR).
    - The GitHub Release step is skipped — expected, training is still gated
      until an external review-velocity label exists.

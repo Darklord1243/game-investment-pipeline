@@ -18,10 +18,11 @@ from dataclasses import dataclass
 from typing import Any, Final, Optional
 
 import praw
-import prawcore
 from dotenv import load_dotenv
+from praw.exceptions import PRAWException
 from praw.models import Comment, Submission
 from praw.reddit import Reddit
+from prawcore.exceptions import PrawcoreException, TooManyRequests
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -288,7 +289,7 @@ class RedditAPIClient:
         self._limiter.wait_if_needed()
         submission.comments.replace_more(limit=0)
         self._limiter.record_request()
-        return list(submission.comments)
+        return [item for item in submission.comments.list() if isinstance(item, Comment)]
 
     def _detect_emotions(self, texts: list[str]) -> list[str]:
         """Run batch emotion classification; unknown on failure."""
@@ -484,7 +485,7 @@ class RedditAPIClient:
                         self._limiter.wait_if_needed()
                         self._limiter.record_request()
                         backoff = INITIAL_BACKOFF_SECONDS
-                    except prawcore.exceptions.RateLimitExceeded as exc:
+                    except TooManyRequests as exc:
                         RedditRateLimiter.sleep_for_backoff(backoff)
                         logger.warning(
                             "Rate limit parsing post in r/%s: %s",
@@ -492,7 +493,7 @@ class RedditAPIClient:
                             exc,
                         )
                         backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
-                    except prawcore.PRAWException as exc:
+                    except (PrawcoreException, PRAWException) as exc:
                         logger.error(
                             "PRAW error processing post in r/%s for %r: %s",
                             subreddit_name,
@@ -501,7 +502,7 @@ class RedditAPIClient:
                             exc_info=True,
                         )
 
-            except prawcore.exceptions.RateLimitExceeded as exc:
+            except TooManyRequests as exc:
                 RedditRateLimiter.sleep_for_backoff(backoff)
                 logger.warning(
                     "Rate limit accessing r/%s for %r: %s",
@@ -510,7 +511,7 @@ class RedditAPIClient:
                     exc,
                 )
                 backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
-            except prawcore.PRAWException as exc:
+            except (PrawcoreException, PRAWException) as exc:
                 logger.error(
                     "PRAW error accessing r/%s for %r: %s",
                     subreddit_name,
@@ -705,7 +706,7 @@ def run_batch(client: RedditAPIClient, batch_day: dt.date) -> None:
                     game.steam_name,
                 )
                 mine_game(session, client, game)
-        except (RuntimeError, SQLAlchemyError, prawcore.PRAWException) as exc:
+        except (RuntimeError, SQLAlchemyError, PrawcoreException, PRAWException) as exc:
             logger.error(
                 "Failed mining game id=%s: %s",
                 game_id,
