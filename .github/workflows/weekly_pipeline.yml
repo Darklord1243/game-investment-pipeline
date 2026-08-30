@@ -48,6 +48,7 @@ jobs:
 
       - name: Seed database & mine Steam data
         env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
           DATABASE_URL: sqlite:///data/game_metrics.db
         run: python src/data_collection/steam_data_miner.py --limit 50
 

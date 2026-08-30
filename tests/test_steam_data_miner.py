@@ -15,11 +15,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.data_collection.steam_data_miner import (  # noqa: E402
     MIN_REVIEWS_FOR_SEED,
+    STEAM_STORE_APP_LIST_URL,
     GameSnapshot,
     SteamAPIClient,
     SteamRateLimiter,
     parse_app_details_payload,
     parse_review_summary_payload,
+    parse_store_app_list_payload,
     parse_store_page_html,
     persist_game_snapshot,
     resolve_appid_by_name,
@@ -232,3 +234,69 @@ def test_run_full_seed_caps_pending_appids():
                     )
 
     assert processed == [0, 1, 2]
+
+
+def test_parse_store_app_list_payload_filters_and_cursor() -> None:
+    payload = {
+        "response": {
+            "apps": [
+                {"appid": 10, "name": "Counter-Strike"},
+                {"appid": 20, "name": ""},
+                {"appid": 30, "name": "Day of Defeat"},
+            ],
+            "have_more_results": True,
+            "last_appid": 30,
+        }
+    }
+    entries, last_appid, have_more = parse_store_app_list_payload(payload)
+    assert [entry.appid for entry in entries] == [10, 30]
+    assert last_appid == 30
+    assert have_more is True
+
+
+def test_parse_store_app_list_payload_complete_when_flag_absent() -> None:
+    payload = {"response": {"apps": [{"appid": 1, "name": "Half-Life"}]}}
+    entries, last_appid, have_more = parse_store_app_list_payload(payload)
+    assert len(entries) == 1
+    assert last_appid is None
+    assert have_more is False
+
+
+def test_fetch_app_list_requires_steam_api_key() -> None:
+    client = SteamAPIClient(limiter=SteamRateLimiter(), session=MagicMock())
+    with patch("src.data_collection.steam_data_miner.os.getenv", return_value=None):
+        with pytest.raises(RuntimeError, match="STEAM_API_KEY"):
+            client.fetch_app_list()
+
+
+def test_fetch_app_list_paginates_istore_service() -> None:
+    client = SteamAPIClient(limiter=SteamRateLimiter(), session=MagicMock())
+    pages = [
+        {
+            "response": {
+                "apps": [{"appid": 1, "name": "One"}],
+                "have_more_results": True,
+                "last_appid": 1,
+            }
+        },
+        {
+            "response": {
+                "apps": [{"appid": 2, "name": "Two"}],
+                "have_more_results": False,
+                "last_appid": 2,
+            }
+        },
+    ]
+    with patch("src.data_collection.steam_data_miner.os.getenv", return_value="test-key"):
+        with patch.object(client, "_get_json", side_effect=pages) as mock_get:
+            entries = client.fetch_app_list()
+
+    assert [entry.name for entry in entries] == ["One", "Two"]
+    assert mock_get.call_count == 2
+    first_call = mock_get.call_args_list[0]
+    second_call = mock_get.call_args_list[1]
+    assert first_call.args[0] == STEAM_STORE_APP_LIST_URL
+    assert first_call.kwargs["params"]["key"] == "test-key"
+    assert "last_appid" not in first_call.kwargs["params"]
+    assert second_call.kwargs["params"]["last_appid"] == 1
+

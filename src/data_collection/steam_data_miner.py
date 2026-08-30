@@ -12,6 +12,7 @@ import argparse
 import datetime as dt
 import difflib
 import logging
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -52,7 +53,10 @@ STEAM_USER_AGENT: Final[str] = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
-STEAM_APP_LIST_URL: Final[str] = "https://api.steampowered.com/ISteamApps/GetAppList/v2/"
+STEAM_STORE_APP_LIST_URL: Final[str] = (
+    "https://api.steampowered.com/IStoreService/GetAppList/v1/"
+)
+APP_LIST_MAX_RESULTS: Final[int] = 50_000
 STEAM_APP_DETAILS_URL: Final[str] = "https://store.steampowered.com/api/appdetails"
 STEAM_REVIEW_SUMMARY_URL: Final[str] = "https://store.steampowered.com/appreviews/{appid}"
 STEAM_REVIEW_RECENT_URL: Final[str] = "https://store.steampowered.com/appreviews/{appid}"
@@ -220,6 +224,46 @@ def parse_steam_release_date(raw: str) -> Optional[dt.date]:
             continue
     logger.warning("Unparseable Steam release_date: %r", raw)
     return None
+
+
+def load_steam_web_api_key() -> str:
+    """Load the Steam Web API key required by IStoreService/GetAppList."""
+    key = os.getenv("STEAM_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "Missing Steam credentials in environment: STEAM_API_KEY. "
+            "Get a key at https://steamcommunity.com/dev/apikey"
+        )
+    return key
+
+
+def parse_store_app_list_payload(
+    payload: dict[str, Any],
+) -> tuple[list[SteamAppListEntry], Optional[int], bool]:
+    """Parse one IStoreService/GetAppList page into entries and a continuation cursor."""
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        raise RuntimeError("Steam store app list missing 'response' object.")
+
+    apps = response.get("apps")
+    if apps is None:
+        apps = []
+    if not isinstance(apps, list):
+        raise RuntimeError("Steam store app list missing 'apps' array.")
+
+    entries: list[SteamAppListEntry] = []
+    for item in apps:
+        if not isinstance(item, dict):
+            continue
+        appid = parse_positive_int(item.get("appid"), "appid")
+        name = item.get("name")
+        if appid is None or not isinstance(name, str) or not name.strip():
+            continue
+        entries.append(SteamAppListEntry(appid=appid, name=name.strip()))
+
+    last_appid = parse_positive_int(response.get("last_appid"), "last_appid")
+    have_more = bool(response.get("have_more_results", False))
+    return entries, last_appid, have_more
 
 
 def parse_app_details_payload(
@@ -494,28 +538,38 @@ class SteamAPIClient:
         return payload
 
     def fetch_app_list(self) -> list[SteamAppListEntry]:
-        """Download the global Steam app list."""
-        payload = self._get_json(STEAM_APP_LIST_URL, endpoint="GetAppList/v2")
-        if payload is None:
-            raise RuntimeError("Failed to fetch Steam app list.")
-
-        applist = payload.get("applist")
-        if not isinstance(applist, dict):
-            raise RuntimeError("Steam app list missing 'applist' object.")
-
-        apps = applist.get("apps")
-        if not isinstance(apps, list):
-            raise RuntimeError("Steam app list missing 'apps' array.")
-
+        """Download the Steam Store app list via paginated IStoreService/GetAppList."""
+        api_key = load_steam_web_api_key()
         entries: list[SteamAppListEntry] = []
-        for item in apps:
-            if not isinstance(item, dict):
-                continue
-            appid = parse_positive_int(item.get("appid"), "appid")
-            name = item.get("name")
-            if appid is None or not isinstance(name, str) or not name.strip():
-                continue
-            entries.append(SteamAppListEntry(appid=appid, name=name.strip()))
+        last_appid: Optional[int] = None
+
+        while True:
+            params: dict[str, str | int] = {
+                "key": api_key,
+                "include_games": 1,
+                "include_dlc": 0,
+                "include_software": 0,
+                "include_videos": 0,
+                "include_hardware": 0,
+                "max_results": APP_LIST_MAX_RESULTS,
+            }
+            if last_appid is not None:
+                params["last_appid"] = last_appid
+
+            payload = self._get_json(
+                STEAM_STORE_APP_LIST_URL,
+                params=params,
+                endpoint="IStoreService/GetAppList/v1",
+            )
+            if payload is None:
+                raise RuntimeError("Failed to fetch Steam app list.")
+
+            page_entries, cursor, have_more = parse_store_app_list_payload(payload)
+            entries.extend(page_entries)
+            if not have_more or cursor is None or cursor == last_appid:
+                break
+            last_appid = cursor
+
         logger.info("Fetched %d Steam app list entries.", len(entries))
         return entries
 
