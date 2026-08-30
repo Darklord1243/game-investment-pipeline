@@ -75,4 +75,6 @@ python src/data_collection/reddit_data_miner.py
 python src/api/webapp.py
 ```
 
+> See [`docs/API_KEYS_SETUP.md`](docs/API_KEYS_SETUP.md) for how to obtain each API credential above and store it safely, both locally and as GitHub Actions secrets for the weekly pipeline.
+
 Set `DATABASE_URL=sqlite:///data/game_metrics.db` in your environment (or rely on the default in `src/database/models.py`).
