@@ -1,9 +1,18 @@
 """
-Thread-safe rate limiter with sliding-window pacing and exponential backoff.
+Thread-safe sliding-window rate limiter shared by the platform miners.
 
 Platform-specific miners can either instantiate ``BaseRateLimiter`` directly
 with appropriate parameters or subclass it to add bespoke behaviour (e.g.
 header-aware backoff for Twitch, fixed-delay pacing for Reddit).
+
+Deliberately pacing-only. This class used to carry a ``handle_rate_limit``
+exponential-backoff helper, together with its ``backoff_base`` / ``backoff_max``
+parameters and a ``reset_backoff`` companion. Nothing ever called any of it. It
+was removed rather than wired in: every miner already handles its own
+rate-limit responses, and retrofitting a 60s-doubling schedule onto Steam,
+Twitch and YouTube would have changed their retry behaviour with no test
+covering the change. Reddit's exponential backoff is hand-rolled in
+``reddit_data_miner`` and is unaffected.
 """
 
 from __future__ import annotations
@@ -16,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseRateLimiter:
-    """Sliding-window request pacer with exponential backoff on 429 / rate-limit responses.
+    """Sliding-window request pacer.
 
     Parameters
     ----------
@@ -25,24 +34,15 @@ class BaseRateLimiter:
     buffer:
         Requests subtracted from the ceiling so the limiter fires *before*
         the server-side limit is reached.
-    backoff_base:
-        Initial sleep duration (seconds) used by ``handle_rate_limit``.
-    backoff_max:
-        Ceiling for the exponential backoff sequence.
     """
 
     def __init__(
         self,
         max_requests_per_minute: int = 60,
         buffer: int = 5,
-        backoff_base: float = 60.0,
-        backoff_max: float = 300.0,
     ) -> None:
         self._max_requests_per_minute = max_requests_per_minute
         self._buffer = buffer
-        self._backoff_base = backoff_base
-        self._backoff_max = backoff_max
-        self._current_backoff = backoff_base
         self._timestamps: list[float] = []
         self._lock = threading.Lock()
 
@@ -71,22 +71,3 @@ class BaseRateLimiter:
         """Record that an HTTP request was dispatched."""
         with self._lock:
             self._timestamps.append(time.time())
-
-    # ------------------------------------------------------------------
-    # Exponential backoff for server-side rate-limit responses
-    # ------------------------------------------------------------------
-
-    def handle_rate_limit(self) -> None:
-        """Sleep with exponential backoff and double the backoff window.
-
-        Call this on a 429 / 403-quota response so that subsequent calls
-        wait progressively longer until the server recovers.
-        """
-        wait = self._current_backoff
-        self._current_backoff = min(self._current_backoff * 2, self._backoff_max)
-        logger.warning("Rate limit hit; backing off %.0f seconds.", wait)
-        time.sleep(wait)
-
-    def reset_backoff(self) -> None:
-        """Reset the backoff interval after a successful request window."""
-        self._current_backoff = self._backoff_base

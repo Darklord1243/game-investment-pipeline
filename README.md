@@ -19,7 +19,7 @@
 Each platform miner is a self-contained module that writes directly to the normalized SQLite schema. No intermediate CSVs, no flat-file staging.
 
 - **Strictly typed DataClasses** — `GameSnapshot`, `StreamSnapshot`, `VideoSnapshot`, `PostSnapshot` are frozen, `slots=True` dataclasses that serve as the single contract between API ingestion and ORM persistence.
-- **Custom RateLimiters** — `SteamRateLimiter`, `TwitchRateLimiter`, `YouTubeRateLimiter`, and `RedditRateLimiter` implement sliding-window pacing with exponential backoff. Every API call is gated.
+- **Custom RateLimiters** — `SteamRateLimiter`, `TwitchRateLimiter`, `YouTubeRateLimiter`, and `RedditRateLimiter` gate **every API call the platform miners make** behind sliding-window pacing (`src/utils/http.py`). Rate-limit *responses* are then handled per platform, and they differ: **Reddit backs off exponentially** (60s, doubling, capped at 300s); **Steam, Twitch and YouTube retry at a fixed interval** (5s, 60s and 60s respectively, up to 3 attempts). Twitch additionally honours Helix `Ratelimit-*` headers.
 - **Seeder-first design** — `steam_data_miner.py` seeds the canonical `Game` dimension table and appends `SteamMetric` time-series rows before engagement miners run.
 - **Checkpointing** — miners query the database for the latest record per game and ingest only delta data, making each run incremental and idempotent.
 
@@ -74,5 +74,7 @@ python src/data_collection/reddit_data_miner.py
 # 4. Start the demo webapp
 python src/api/webapp.py
 ```
+
+> See [`docs/API_KEYS_SETUP.md`](docs/API_KEYS_SETUP.md) for how to obtain each API credential above and store it safely, both locally and as GitHub Actions secrets for the weekly pipeline.
 
 Set `DATABASE_URL=sqlite:///data/game_metrics.db` in your environment (or rely on the default in `src/database/models.py`).

@@ -18,5 +18,4 @@ warn_return_any = true
 exclude = [
     "(^|/)model_monitoring\\.py$",
     "(^|/)seed_database\\.py$",
-    "(^|/)backfill_youtube_dislike_count\\.py$",
 ]
